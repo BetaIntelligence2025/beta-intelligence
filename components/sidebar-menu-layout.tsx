@@ -1,7 +1,7 @@
 "use client"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LayoutDashboard, Users } from "lucide-react"
+import { Braces, LayoutDashboard, Users } from "lucide-react"
 
 import {
   Sidebar,
@@ -37,7 +37,7 @@ export function SidebarMenuLayout() {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton asChild isActive={pathname === "/"}>
-              <Link href="/">
+              <Link href="/dashboard">
                 <LayoutDashboard className="mr-2 h-4 w-4" />
                 Dashboard
               </Link>
@@ -48,6 +48,14 @@ export function SidebarMenuLayout() {
               <Link href="/usuarios">
                 <Users className="mr-2 h-4 w-4" />
                 Usuários
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild isActive={pathname === "/events"}>
+              <Link href="/events">
+                <Braces className="mr-2 h-4 w-4" />
+                Eventos
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

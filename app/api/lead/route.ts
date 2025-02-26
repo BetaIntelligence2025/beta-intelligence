@@ -1,4 +1,3 @@
-import { createClient } from '@/utils/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(request: Request) {
@@ -34,15 +33,5 @@ export async function GET(request: Request) {
   } catch (error) {
     console.error('Erro ao buscar leads:', error)
     return NextResponse.json({ error: 'Erro ao buscar leads' }, { status: 500 })
-  }
-}
-
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json()
-    // Lógica para criar lead
-    return NextResponse.json({ message: 'Lead criado com sucesso' })
-  } catch (error) {
-    return NextResponse.json({ error: 'Erro ao criar lead' }, { status: 500 })
   }
 } 

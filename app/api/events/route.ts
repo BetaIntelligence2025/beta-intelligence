@@ -1,48 +1,50 @@
 import { NextRequest, NextResponse } from 'next/server'
 import axios from 'axios'
+import { Event, FetchEventsResponse } from '@/app/types/events-type'
 
 export async function GET(request: NextRequest) {
   try {
-    const searchParams = request.nextUrl.searchParams
+    const { searchParams } = new URL(request.url)
     const page = searchParams.get('page') || '1'
     const limit = searchParams.get('limit') || '10'
     const sortBy = searchParams.get('sortBy')
     const sortDirection = searchParams.get('sortDirection')
+    const from = searchParams.get('from')
+    const to = searchParams.get('to')
+    const professionId = searchParams.get('professionId')
+    const funnelId = searchParams.get('funnelId')
 
-    // Log para debug
-    console.log('Fetching events from external API')
-
-    const { data } = await axios.get('http://localhost:8080/events', {
+    const response = await axios.get('http://localhost:8080/events', {
       params: {
-        page,
-        limit,
-        sortBy,
-        sortDirection
+        page: Number(page),
+        limit: Number(limit),
+        ...(sortBy && { sortBy }),
+        ...(sortDirection && { sortDirection }),
+        ...(from && { from }),
+        ...(to && { to }),
+        ...(professionId && { profession_id: professionId }),
+        ...(funnelId && { funnel_id: funnelId })
       }
     })
 
-    // Log para debug
-    console.log('API Response:', data)
-
     return NextResponse.json({
-      events: data.data,
-      page: parseInt(page),
-      total: data.meta.total,
-      totalPages: data.meta.last_page,
-      limit: data.meta.limit
+      events: response.data.data,
+      meta: {
+        ...response.data.meta,
+        profession_id: professionId ? Number(professionId) : undefined,
+        funnel_id: funnelId ? Number(funnelId) : undefined
+      }
     })
   } catch (error) {
     console.error('Error fetching events:', error)
-    return NextResponse.json(
-      { 
-        events: [],
-        page: 1,
+    return NextResponse.json({
+      events: [],
+      meta: {
         total: 0,
-        totalPages: 1,
+        page: 1,
         limit: 10,
-        error: 'Failed to fetch events' 
-      },
-      { status: 500 }
-    )
+        last_page: 1
+      }
+    }, { status: 500 })
   }
 } 

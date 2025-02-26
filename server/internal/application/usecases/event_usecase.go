@@ -1,12 +1,14 @@
 package usecases
 
 import (
+	"time"
+
 	"github.com/PavaniTiago/beta-intelligence/internal/domain/entities"
 	"github.com/PavaniTiago/beta-intelligence/internal/domain/repositories"
 )
 
 type EventUseCase interface {
-	GetEvents(page, limit int, orderBy string) ([]entities.Event, int64, error)
+	GetEvents(page, limit int, orderBy string, from, to time.Time, professionID, funnelID *int) ([]entities.Event, int64, error)
 }
 
 type eventUseCase struct {
@@ -17,7 +19,7 @@ func NewEventUseCase(eventRepo repositories.EventRepository) EventUseCase {
 	return &eventUseCase{eventRepo}
 }
 
-func (uc *eventUseCase) GetEvents(page, limit int, orderBy string) ([]entities.Event, int64, error) {
+func (uc *eventUseCase) GetEvents(page, limit int, orderBy string, from, to time.Time, professionID, funnelID *int) ([]entities.Event, int64, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -28,5 +30,5 @@ func (uc *eventUseCase) GetEvents(page, limit int, orderBy string) ([]entities.E
 		orderBy = "event_time desc"
 	}
 
-	return uc.eventRepo.GetEvents(page, limit, orderBy)
+	return uc.eventRepo.GetEvents(page, limit, orderBy, from, to, professionID, funnelID)
 }

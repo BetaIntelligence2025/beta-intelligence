@@ -6,14 +6,18 @@ import axios from "axios";
 import { EventsTable } from "./events-table";
 import { Pagination } from "@/components/pagination";
 import { createClient } from "@/utils/supabase/client";
-import { useState, useCallback } from "react";
-import { redirect } from "next/navigation";
+import { useState, useCallback, useEffect } from "react";
+import { redirect, useRouter, useSearchParams } from "next/navigation";
 import { FetchEventsResponse } from "../types/events-type";
 
 const fetchEvents = async (page = 1, limit = 10): Promise<FetchEventsResponse> => {
   try {
     const { data } = await axios.get<FetchEventsResponse>("/api/events", {
-      params: { page, limit },
+      params: { 
+        page, 
+        limit,
+        ...Object.fromEntries(new URLSearchParams(window.location.search))
+      },
     });
     return data;
   } catch (error) {
@@ -23,6 +27,8 @@ const fetchEvents = async (page = 1, limit = 10): Promise<FetchEventsResponse> =
 
 export default function EventsPage() {
   const supabase = createClient();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 10;
   const [loading, setLoading] = useState(true);
@@ -34,28 +40,31 @@ export default function EventsPage() {
     direction: null
   });
 
-  const { data: eventsData, isLoading, error, refetch } = useQuery({
-    queryKey: ["events", currentPage, sortConfig],
-    queryFn: async () => {
-      const data = await fetchEvents(currentPage, ITEMS_PER_PAGE)
-      console.log('Query response:', data) // Log para debug
-      return data
-    },
-    refetchOnWindowFocus: false,
-  });
+  // Resetar página quando filtros mudarem
+  useEffect(() => {
+    const page = Number(searchParams.get('page')) || 1;
+    setCurrentPage(page);
+  }, [searchParams]);
 
   if (!supabase.auth.getUser()) {
     return redirect("/sign-in");
   }
 
-  const handlePageChange = (newPage: number) => {
+  const handlePageChange = useCallback((newPage: number) => {
     setCurrentPage(newPage);
-  };
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('page', newPage.toString());
+    router.push(`/events?${params.toString()}`, { scroll: false });
+  }, [router, searchParams]);
+
+  const { data: eventsData, isLoading, error, refetch } = useQuery({
+    queryKey: ["events", currentPage, sortConfig, searchParams.toString()],
+    queryFn: () => fetchEvents(currentPage, ITEMS_PER_PAGE),
+  });
 
   const handleSort = useCallback(async (columnId: string, direction: 'asc' | 'desc' | null) => {
     setSortConfig({ column: columnId, direction });
     setLoading(true);
-
     try {
       const response = await axios.get('/api/events', {
         params: {
@@ -66,7 +75,6 @@ export default function EventsPage() {
         }
       });
       
-      // Update the query cache
       refetch();
     } catch (error) {
       console.error('Error sorting events:', error);
@@ -84,15 +92,16 @@ export default function EventsPage() {
         <EventsTable 
           result={eventsData || { 
             events: [],
-            page: 1,
-            total: 0,
-            totalPages: 0,
-            limit: ITEMS_PER_PAGE
+            meta: {
+              total: 0,
+              page: 1,
+              limit: ITEMS_PER_PAGE,
+              last_page: 1
+            }
           }} 
           isLoading={isLoading} 
           onSort={handleSort}
           currentPage={currentPage}
-          totalResults={eventsData?.events || []}
           sortColumn={sortConfig.column}
           sortDirection={sortConfig.direction}
         />
@@ -100,9 +109,9 @@ export default function EventsPage() {
         {(eventsData?.events?.length || 0) > 0 && (
           <Pagination
             onPageChange={handlePageChange}
-            pageIndex={eventsData?.page || 1}
-            totalCount={eventsData?.total || 0}
-            perPage={eventsData?.limit || 10}
+            pageIndex={eventsData?.meta?.page || 1}
+            totalCount={eventsData?.meta?.total || 0}
+            perPage={eventsData?.meta?.limit || ITEMS_PER_PAGE}
           />
         )}
 

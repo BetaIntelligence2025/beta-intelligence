@@ -11,19 +11,44 @@ export interface Event {
   event_source: string;
   event_type: string;
   user: {
-    phone: string;
     fullname: string;
     email: string;
+    phone: string;
     isClient: boolean;
-  }
+    initialDeviceType: string;
+  };
+  profession: {
+    profession_name: string;
+  };
+  product: {
+    product_name: string;
+  };
+  funnel: {
+    funnel_name: string;
+    funnel_tag: string;
+  };
+  session: {
+    utm_source: string;
+    utm_medium: string;
+    utm_campaign: string;
+    utm_content: string;
+    utm_term: string;
+    country: string;
+    state: string;
+    city: string;
+  };
 }
 
 export interface FetchEventsResponse {
-  events: Event[];
-  page: number;
-  total: number;
-  totalPages: number;
-  limit: number;
+  events: Event[]
+  meta: {
+    total: number
+    page: number
+    limit: number
+    last_page: number
+    profession_id?: number
+    funnel_id?: number
+  }
 }
 
 export interface EventsTableProps {
@@ -31,7 +56,6 @@ export interface EventsTableProps {
   isLoading: boolean;
   onSort: (columnId: string, direction: 'asc' | 'desc' | null) => void;
   currentPage: number;
-  totalResults: Event[];
   sortColumn: string | null;
   sortDirection: 'asc' | 'desc' | null;
 } 

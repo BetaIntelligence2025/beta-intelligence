@@ -35,17 +35,20 @@ export function EventsTableRow({ event, visibleColumns }: EventsTableRowProps) {
   }
 
   return (
-    <TableRow>
+    <tr className="hover:bg-gray-50 divide-x divide-gray-200">
       {visibleColumns.map((columnId) => {
         const column = COLUMN_CONFIGS.find(c => c.accessorKey === columnId)
         return (
-          <TableCell key={columnId}>
+          <td 
+            key={`${event.event_id}-${columnId}`}
+            className="px-4 py-3.5 text-[13px] text-gray-900"
+          >
             {column?.cell 
               ? column.cell({ row: { getValue } })
               : String(getValue(columnId) ?? '-')}
-          </TableCell>
+          </td>
         )
       })}
-    </TableRow>
+    </tr>
   )
 } 

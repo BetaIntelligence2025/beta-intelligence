@@ -27,14 +27,20 @@ func SetupRoutes(app *fiber.App, db *gorm.DB) {
 	// Repositories
 	userRepo := repositories.NewUserRepository(db)
 	eventRepo := repositories.NewEventRepository(db)
+	professionRepo := repositories.NewProfessionRepository(db)
+	funnelRepo := repositories.NewFunnelRepository(db)
 
 	// Use Cases
 	userUseCase := usecases.NewUserUseCase(userRepo)
 	eventUseCase := usecases.NewEventUseCase(eventRepo)
+	professionUseCase := usecases.NewProfessionUseCase(professionRepo)
+	funnelUseCase := usecases.NewFunnelUseCase(funnelRepo)
 
 	// Handlers
 	userHandler := handlers.NewUserHandler(userUseCase, userRepo)
 	eventHandler := handlers.NewEventHandler(eventUseCase)
+	professionHandler := handlers.NewProfessionHandler(professionUseCase)
+	funnelHandler := handlers.NewFunnelHandler(funnelUseCase)
 
 	// Routes
 	groups := middleware.SetupRouteGroups(app, authMiddleware)
@@ -53,4 +59,10 @@ func SetupRoutes(app *fiber.App, db *gorm.DB) {
 
 	// Events routes
 	groups.Public.Get("/events", eventHandler.GetEvents)
+
+	// Professions routes
+	groups.Public.Get("/professions", professionHandler.GetProfessions)
+
+	// Funnels routes
+	groups.Public.Get("/funnels", funnelHandler.GetFunnels)
 }

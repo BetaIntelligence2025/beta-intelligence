@@ -1,9 +1,8 @@
-import { ColumnId } from '@/stores/use-columns-store'
 import { create } from 'zustand'
 
-import { persist } from 'zustand/middleware'
+type ColumnId = 'name' | 'phone' | 'fbc' | 'fbp' | 'email' | 'status' | 'created_at' | 'updated_at'
 
-interface TableStore {
+interface TableState {
   columnWidths: Record<ColumnId, number>
   isResizing: boolean
   activeResizer: ColumnId | null
@@ -14,47 +13,41 @@ interface TableStore {
   setIsResizing: (isResizing: boolean) => void
 }
 
-export const useTableStore = create<TableStore>()(
-  persist(
-    (set) => ({
+export const useTableStore = create<TableState>((set) => ({
+  columnWidths: {
+    name: 250,
+    phone: 180,
+    fbc: 150,
+    fbp: 150,
+    email: 250,
+    status: 120,
+    created_at: 180,
+    updated_at: 180
+  },
+  isResizing: false,
+  activeResizer: null,
+  startWidth: 0,
+  setColumnWidth: (columnId: ColumnId, width: number) =>
+    set((state) => ({
       columnWidths: {
-        id: 100,
-        name: 250,
-        phone: 180,
-        fbc: 150,
-        fbp: 150,
-        createdAt: 180,
-        actions: 100,
+        ...state.columnWidths,
+        [columnId]: width,
       },
+    })),
+  startResizing: (columnId, width) =>
+    set(() => ({
+      isResizing: true,
+      activeResizer: columnId,
+      startWidth: width,
+    })),
+  stopResizing: () =>
+    set(() => ({
       isResizing: false,
       activeResizer: null,
       startWidth: 0,
-      setColumnWidth: (columnId, width) =>
-        set((state) => ({
-          columnWidths: { 
-            ...state.columnWidths, 
-            [columnId]: Math.max(80, Math.min(500, width)) // Min: 80px, Max: 500px
-          },
-        })),
-      startResizing: (columnId, width) =>
-        set(() => ({
-          isResizing: true,
-          activeResizer: columnId,
-          startWidth: width,
-        })),
-      stopResizing: () =>
-        set(() => ({
-          isResizing: false,
-          activeResizer: null,
-          startWidth: 0,
-        })),
-      setIsResizing: (isResizing) =>
-        set(() => ({
-          isResizing,
-        })),
-    }),
-    {
-      name: 'table-storage',
-    }
-  )
-) 
+    })),
+  setIsResizing: (isResizing) =>
+    set(() => ({
+      isResizing,
+    })),
+})) 

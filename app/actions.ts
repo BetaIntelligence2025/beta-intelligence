@@ -11,7 +11,12 @@ export const signUpAction = async (formData: FormData) => {
   const supabase = await createClient();
   const origin = (await headers()).get("origin");
 
+  console.log("[SIGN-UP] Iniciando cadastro com email:", email);
+  console.log("[SIGN-UP] Origin:", origin);
+  console.log("[SIGN-UP] Redirect URL:", `${origin}/auth/callback`);
+
   if (!email || !password) {
+    console.log("[SIGN-UP] Erro: Email e senha são obrigatórios");
     return encodedRedirect(
       "error",
       "/sign-up",
@@ -19,7 +24,9 @@ export const signUpAction = async (formData: FormData) => {
     );
   }
 
-  const { error } = await supabase.auth.signUp({
+  // Chamando supabase.auth.signUp
+  console.log("[SIGN-UP] Chamando supabase.auth.signUp...");
+  const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
@@ -27,10 +34,23 @@ export const signUpAction = async (formData: FormData) => {
     },
   });
 
+  // Registrando resultado
+  console.log("[SIGN-UP] Resposta do Supabase:", { 
+    success: !error, 
+    user: data?.user ? { 
+      id: data.user.id, 
+      email: data.user.email,
+      emailConfirmed: data.user.email_confirmed_at ? 'sim' : 'não'
+    } : null,
+    session: data?.session ? 'presente' : 'ausente'
+  });
+
   if (error) {
-    console.error(error.code + " " + error.message);
+    console.error("[SIGN-UP] Erro:", error.code, error.message);
+    console.error("[SIGN-UP] Detalhes completos:", error);
     return encodedRedirect("error", "/sign-up", error.message);
   } else {
+    console.log("[SIGN-UP] Sucesso! Usuário cadastrado.");
     return encodedRedirect(
       "success",
       "/sign-up",
@@ -42,17 +62,42 @@ export const signUpAction = async (formData: FormData) => {
 export const signInAction = async (formData: FormData) => {
   const email = formData.get("email") as string;
   const password = formData.get("password") as string;
+  
+  console.log("[SIGN-IN] Iniciando login com email:", email);
+  
+  // Criando cliente Supabase
+  console.log("[SIGN-IN] Criando cliente Supabase...");
   const supabase = await createClient();
-
-  const { error } = await supabase.auth.signInWithPassword({
+  
+  // Tentando fazer login
+  console.log("[SIGN-IN] Chamando supabase.auth.signInWithPassword...");
+  const { data, error } = await supabase.auth.signInWithPassword({
     email,
     password,
   });
 
+  // Registrando resultado
+  console.log("[SIGN-IN] Resposta do Supabase:", { 
+    success: !error, 
+    user: data?.user ? { 
+      id: data.user.id, 
+      email: data.user.email 
+    } : null,
+    session: data?.session ? {
+      accessToken: data.session.access_token ? 'presente' : 'ausente',
+      expiresAt: data.session.expires_at
+    } : 'ausente'
+  });
+
+  // Se houver erro, redirecionar com mensagem de erro
   if (error) {
+    console.error("[SIGN-IN] Erro:", error.code, error.message);
+    console.error("[SIGN-IN] Detalhes completos:", error);
     return encodedRedirect("error", "/sign-in", error.message);
   }
 
+  // Se login for bem-sucedido, redirecionar para dashboard
+  console.log("[SIGN-IN] Login bem-sucedido! Redirecionando para /dashboard");
   return redirect("/dashboard");
 };
 

@@ -1,66 +1,194 @@
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { useState, useEffect } from 'react'
+import { columns } from './columns'
+import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { Checkbox } from "@/components/ui/checkbox"
-import { COLUMN_CONFIGS, useColumnsStore } from "@/stores/use-columns-store"
-import { ScrollArea } from "@/components/ui/scroll-area"
+import { 
+  DndContext, 
+  KeyboardSensor, 
+  PointerSensor, 
+  closestCenter, 
+  useSensor, 
+  useSensors 
+} from "@dnd-kit/core"
+import { 
+  SortableContext, 
+  arrayMove, 
+  sortableKeyboardCoordinates, 
+  useSortable, 
+  verticalListSortingStrategy 
+} from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
+import { GripVertical } from "lucide-react"
 
 interface ColumnManagementModalProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
+  isOpen: boolean
+  onClose: () => void
+  visibleColumns: string[]
+  onColumnChange: (columns: string[]) => void
 }
 
-export function ColumnManagementModal({
-  open,
-  onOpenChange,
-}: ColumnManagementModalProps) {
-  const { visibleColumns, toggleColumn } = useColumnsStore()
+interface SortableItemProps {
+  id: string
+  label: string
+  isActive: boolean
+  onToggle: () => void
+}
 
-  // Agrupa as colunas por grupo
-  const groupedColumns = COLUMN_CONFIGS.reduce((acc, column) => {
-    const group = column.group || "Padrão"
-    if (!acc[group]) {
-      acc[group] = []
-    }
-    acc[group].push(column)
-    return acc
-  }, {} as Record<string, typeof COLUMN_CONFIGS>)
+function SortableItem({ id, label, isActive, onToggle }: SortableItemProps) {
+  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="flex items-center justify-between p-3 bg-white border rounded-md mb-2"
+    >
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          className="cursor-grab touch-none"
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical className="h-5 w-5 text-gray-400" />
+        </button>
+        <span className="text-sm">{label}</span>
+      </div>
+      <Switch checked={isActive} onCheckedChange={onToggle} />
+    </div>
+  );
+}
+
+export function ColumnManagementModal({ 
+  isOpen, 
+  onClose, 
+  visibleColumns, 
+  onColumnChange 
+}: ColumnManagementModalProps) {
+  const [availableColumns, setAvailableColumns] = useState<Array<{id: string, header: string, isVisible: boolean}>>([])
+  const [pendingChanges, setPendingChanges] = useState<string[] | null>(null)
+  
+  // Inicializa colunas
+  useEffect(() => {
+    const columnsList = columns.map(col => ({
+      id: col.accessorKey,
+      header: col.header,
+      isVisible: visibleColumns.includes(col.accessorKey)
+    }))
+    
+    // Ordena as colunas - visíveis primeiro na ordem atual, não-visíveis depois
+    const sortedColumns = [...columnsList].sort((a, b) => {
+      if (a.isVisible && b.isVisible) {
+        return visibleColumns.indexOf(a.id) - visibleColumns.indexOf(b.id)
+      }
+      if (a.isVisible) return -1
+      if (b.isVisible) return 1
+      return columnsList.findIndex(c => c.id === a.id) - 
+             columnsList.findIndex(c => c.id === b.id)
+    })
+    
+    setAvailableColumns(sortedColumns)
+    setPendingChanges(null) // Reset pendingChanges quando visibleColumns mudar
+  }, [visibleColumns])
+  
+  // Aplica alterações pendentes
+  useEffect(() => {
+    if (pendingChanges) {
+      onColumnChange(pendingChanges)
+      setPendingChanges(null)
+    }
+  }, [pendingChanges, onColumnChange])
+  
+  // Toggle de coluna
+  const handleToggleColumn = (id: string) => {
+    setAvailableColumns(cols => {
+      const newCols = cols.map(col => 
+        col.id === id ? { ...col, isVisible: !col.isVisible } : col
+      )
+      
+      // Marca mudanças como pendentes
+      const newVisibleColumns = newCols
+        .filter(col => col.isVisible)
+        .map(col => col.id)
+      
+      setPendingChanges(newVisibleColumns)
+      return newCols
+    })
+  }
+
+  // Aplica as alterações após reordenação
+  const handleDragEnd = (event: any) => {
+    const { active, over } = event
+
+    if (over && active.id !== over.id) {
+      setAvailableColumns((items) => {
+        const oldIndex = items.findIndex(item => item.id === active.id)
+        const newIndex = items.findIndex(item => item.id === over.id)
+        const newItems = arrayMove(items, oldIndex, newIndex)
+        
+        // Usa a mesma abordagem de mudanças pendentes
+        const newVisibleColumns = newItems
+          .filter(col => col.isVisible)
+          .map(col => col.id)
+        
+        setPendingChanges(newVisibleColumns) // Usa pendingChanges em vez de chamar diretamente
+        return newItems
+      })
+    }
+  }
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  )
+
+  return (
+    <Dialog open={isOpen} onOpenChange={() => onClose()}>
+      <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Gerenciar Colunas</DialogTitle>
         </DialogHeader>
-        <ScrollArea className="h-[500px] pr-4">
-          {Object.entries(groupedColumns).map(([group, columns]) => (
-            <div key={group} className="mb-6">
-              <h3 className="font-semibold mb-2">{group}</h3>
-              <div className="space-y-2">
-                {columns.map((column) => (
-                  <div key={column.id} className="flex items-center space-x-2">
-                    <Checkbox
-                      id={column.id}
-                      checked={visibleColumns.includes(column.id)}
-                      onCheckedChange={() => toggleColumn(column.id)}
-                      disabled={column.isDefault}
-                    />
-                    <label
-                      htmlFor={column.id}
-                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                    >
-                      {column.label}
-                    </label>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </ScrollArea>
+        
+        <div className="mt-4">
+          <DndContext 
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext 
+              items={availableColumns.map(col => col.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              {availableColumns.map((column) => (
+                <SortableItem 
+                  key={column.id}
+                  id={column.id}
+                  label={column.header}
+                  isActive={column.isVisible}
+                  onToggle={() => handleToggleColumn(column.id)}
+                />
+              ))}
+            </SortableContext>
+          </DndContext>
+        </div>
+        
+        <div className="mt-6 flex justify-end">
+          <Button onClick={onClose}>
+            Fechar
+          </Button>
+        </div>
       </DialogContent>
     </Dialog>
   )

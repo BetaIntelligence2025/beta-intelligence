@@ -1,13 +1,13 @@
 import { useEffect, useRef } from 'react'
-import { ColumnId } from '@/stores/use-columns-store'
-import { useTableStore } from '@/app/stores/use-table-store'
+import { useTableStore, type ColumnId } from '@/app/stores/use-table-store'
 import { GripVertical } from 'lucide-react'
 
 interface ResizerProps {
   columnId: ColumnId
+  onResize?: (width: number) => void
 }
 
-export function Resizer({ columnId }: ResizerProps) {
+export function Resizer({ columnId, onResize }: ResizerProps) {
   const {
     columnWidths,
     isResizing,
@@ -15,6 +15,7 @@ export function Resizer({ columnId }: ResizerProps) {
     startResizing,
     stopResizing,
     setColumnWidth,
+    setIsResizing,
   } = useTableStore()
   
   const resizerRef = useRef<HTMLDivElement>(null)
@@ -22,11 +23,7 @@ export function Resizer({ columnId }: ResizerProps) {
     startX: number
     startWidth: number
     isDragging: boolean
-  }>({
-    startX: 0,
-    startWidth: 0,
-    isDragging: false
-  })
+  } | null>(null)
 
   useEffect(() => {
     const resizer = resizerRef.current
@@ -43,6 +40,7 @@ export function Resizer({ columnId }: ResizerProps) {
       }
       
       startResizing(columnId, columnWidths[columnId])
+      setIsResizing(true)
       
       // Adiciona uma stylesheet temporária para forçar o cursor
       const style = document.createElement('style')
@@ -68,21 +66,23 @@ export function Resizer({ columnId }: ResizerProps) {
       document.body.appendChild(overlay)
 
       function onMouseMove(e: MouseEvent) {
-        if (!dragRef.current.isDragging) return
+        if (!dragRef.current?.isDragging) return
         
         e.preventDefault()
         e.stopPropagation()
         
         const delta = e.clientX - dragRef.current.startX
-        const newWidth = Math.max(80, dragRef.current.startWidth + delta)
+        const newWidth = Math.max(80, Math.min(500, dragRef.current.startWidth + delta))
         
         requestAnimationFrame(() => {
           setColumnWidth(columnId, newWidth)
+          onResize?.(newWidth)
         })
       }
 
       function onMouseUp() {
-        dragRef.current.isDragging = false
+        dragRef.current = null
+        setIsResizing(false)
         document.head.removeChild(style)
         document.body.removeChild(overlay)
         stopResizing()
@@ -100,7 +100,7 @@ export function Resizer({ columnId }: ResizerProps) {
     return () => {
       resizer.removeEventListener('mousedown', onMouseDown)
     }
-  }, [columnId, columnWidths, startResizing, stopResizing, setColumnWidth])
+  }, [columnId, columnWidths, startResizing, stopResizing, setColumnWidth, setIsResizing, onResize])
 
   return (
     <div

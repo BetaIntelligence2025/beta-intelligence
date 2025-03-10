@@ -1,81 +1,86 @@
 'use client'
 
-import { useEffect, useState } from "react"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-
-interface Profession {
-  profession_id: number
-  profession_name: string
-  created_at: string
-  meta_pixel: string
-  meta_token: string
-}
-
-interface ProfessionResponse {
-  data: Profession[]
-  meta: {
-    last_page: number
-    limit: number
-    page: number
-    total: number
-    valid_sort_fields: string[]
-  }
-}
+import { useState, useEffect } from "react"
+import { useQuery } from "@tanstack/react-query"
+import { Button } from "@/components/ui/button"
+import { Filter } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 interface ProfessionFilterProps {
-  onFilterChange: (professionId: string | null) => void
-  value?: string | null
+  onFilterChange?: (professionIds: string[]) => void
+  values?: string[]
+  searchTerm?: string
 }
 
-export function ProfessionFilter({ onFilterChange, value }: ProfessionFilterProps) {
-  const [professions, setProfessions] = useState<Profession[]>([])
-  const [loading, setLoading] = useState(true)
-
+export function ProfessionFilter({ onFilterChange, values = [], searchTerm = "" }: ProfessionFilterProps) {
+  const [selectedIds, setSelectedIds] = useState<string[]>(values)
+  
   useEffect(() => {
-    async function fetchProfessions() {
-      try {
-        const response = await fetch('/api/professions')
-        const data: ProfessionResponse = await response.json()
-        setProfessions(data.data || [])
-      } catch (error) {
-        console.error('Error fetching professions:', error)
-      } finally {
-        setLoading(false)
-      }
+    setSelectedIds(values)
+  }, [values])
+  
+  const { data: professions, isLoading } = useQuery({
+    queryKey: ["professions"],
+    queryFn: async () => {
+      const response = await fetch("/api/professions")
+      const data = await response.json()
+      return data?.data || []
     }
+  })
 
-    fetchProfessions()
-  }, [])
+  const handleSelect = (id: string) => {
+    const newIds = selectedIds.includes(id)
+      ? selectedIds.filter(i => i !== id)
+      : [...selectedIds, id]
+    
+    setSelectedIds(newIds)
+    if (onFilterChange) {
+      onFilterChange(newIds)
+    }
+  }
+  
+  if (isLoading) {
+    return <div className="p-2 text-sm text-muted-foreground">Carregando...</div>
+  }
 
-  if (loading) {
-    return <div>Carregando...</div>
+  if (!Array.isArray(professions) || professions.length === 0) {
+    return <div className="p-2 text-sm text-muted-foreground">Nenhum profissional encontrado</div>
+  }
+
+  const filteredProfessions = professions
+    .filter(p => p && (p.profession_id || p.id))
+    .filter(p => {
+      if (!searchTerm) return true
+      const name = p.profession_name || p.name || ""
+      return name.toLowerCase().includes(searchTerm.toLowerCase())
+    })
+
+  if (filteredProfessions.length === 0) {
+    return <div className="p-2 text-sm text-muted-foreground">Nenhum profissional encontrado com esse termo</div>
   }
 
   return (
-    <Select 
-      value={value || 'all'}
-      onValueChange={(value) => onFilterChange(value === 'all' ? null : value)}
-    >
-      <SelectTrigger className="w-[180px]">
-        <SelectValue placeholder="Selecione a profissão" />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="all">Todas as profissões</SelectItem>
-        {professions.map((profession) => (
-          <SelectItem 
-            key={profession.profession_id} 
-            value={profession.profession_id.toString()}
+    <div className="space-y-1 max-h-[400px] overflow-y-auto pr-2">
+      {filteredProfessions.map((p: any) => {
+        const id = String(p.profession_id || p.id)
+        const name = p.profession_name || p.name || `Profissional ${id}`
+        const isSelected = selectedIds.includes(id)
+        
+        return (
+          <Button
+            key={id}
+            variant="ghost"
+            className={cn(
+              "w-full justify-start text-sm h-8 gap-2",
+              isSelected && "bg-accent"
+            )}
+            onClick={() => handleSelect(id)}
           >
-            {profession.profession_name}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+            <Filter className="h-4 w-4 flex-shrink-0" />
+            {name}
+          </Button>
+        )
+      })}
+    </div>
   )
 } 

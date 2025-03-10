@@ -12,6 +12,14 @@ import { FetchUserResponse } from "@/types/users-type";
 import { FilterSelect } from '@/components/dashboard/filter-select'
 import { TableCell } from '@/components/table-cell'
 
+interface FilteredData {
+  user: any[];
+  page: number;
+  total: number;
+  totalPages: number;
+  limit: number;
+}
+
 const fetchUsers = async (page = 1, limit = 10): Promise<FetchUserResponse> => {
   try {
     const { data } = await axios.get<FetchUserResponse>("/api/users", {
@@ -28,7 +36,13 @@ export default function ProtectedPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 10;
   const [filter, setFilter] = useState('leads')
-  const [filteredData, setFilteredData] = useState<any>({ user: [] })
+  const [filteredData, setFilteredData] = useState<FilteredData>({ 
+    user: [], 
+    page: 1, 
+    total: 0, 
+    totalPages: 0, 
+    limit: ITEMS_PER_PAGE 
+  })
   const [loading, setLoading] = useState(true)
   const [sortConfig, setSortConfig] = useState<{
     column: string | null;
@@ -84,10 +98,10 @@ export default function ProtectedPage() {
           default:
             setFilteredData({ 
               user: users?.users || [],
-              page: users?.page,
-              total: users?.total,
-              totalPages: users?.totalPages,
-              limit: users?.limit
+              page: users?.page || 1,
+              total: users?.total || 0,
+              totalPages: users?.totalPages || 0,
+              limit: users?.limit || ITEMS_PER_PAGE
             })
             setLoading(false)
             return
@@ -138,6 +152,74 @@ export default function ProtectedPage() {
     setCurrentPage(newPage);
   };
 
+  const handlePerPageChange = async (newPerPage: number) => {
+    console.log("handlePerPageChange chamado com:", newPerPage);
+    
+    // Atualiza o estado local primeiro
+    setFilteredData(prev => {
+      console.log("Estado anterior:", prev);
+      const updated = {
+        ...prev,
+        limit: newPerPage
+      };
+      console.log("Novo estado:", updated);
+      return updated;
+    });
+    
+    // Reset para a primeira página
+    setCurrentPage(1);
+    
+    // Inicia a busca com novo valor
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      console.log("Sessão encontrada:", !!session);
+      
+      // Simplificado para depuração - usar a função fetchData existente
+      const fetchWithNewLimit = async () => {
+        setLoading(true);
+        
+        try {
+          let endpoint = filter === 'leads' ? '/api/lead' : 
+                        filter === 'clients' ? '/api/client' : 
+                        filter === 'anonymous' ? '/api/anonymous' : '/api/usuarios';
+          
+          let config = {
+            headers: filter !== 'anonymous' ? 
+                    { 'Authorization': `Bearer ${session?.access_token}` } : {},
+            params: {
+              page: 1,
+              limit: newPerPage,
+              sortBy: sortConfig.column || undefined,
+              sortDirection: sortConfig.direction || undefined
+            }
+          };
+          
+          console.log("Fetch config:", config);
+          console.log("Endpoint:", endpoint);
+          
+          const response = await axios.get(endpoint, config);
+          console.log("Response:", response.data);
+          
+          setFilteredData({
+            user: response.data.users || [],
+            page: 1,
+            total: response.data.total || 0,
+            totalPages: response.data.totalPages || 0,
+            limit: newPerPage
+          });
+        } catch (error) {
+          console.error("Erro ao buscar com novo limite:", error);
+        } finally {
+          setLoading(false);
+        }
+      };
+      
+      fetchWithNewLimit();
+    } catch (error) {
+      console.error("Erro ao obter sessão:", error);
+    }
+  };
+
   const meta = {
     page: filteredData?.page || 1,
     total: filteredData?.total || 0,
@@ -178,7 +260,7 @@ export default function ProtectedPage() {
           break;
         case 'anonymous':
           endpoint = '/api/anonymous';
-          config.headers = {};
+          config.headers = {} as any;
           break;
       }
 
@@ -228,6 +310,7 @@ export default function ProtectedPage() {
         {filteredData?.user?.length > 0 && (
           <Pagination
             onPageChange={handlePageChange}
+            onPerPageChange={handlePerPageChange}
             pageIndex={meta.page}
             totalCount={meta.total}
             perPage={meta.limit}

@@ -4,7 +4,8 @@ import { Table, TableBody } from "@/components/ui/table";
 import { DashboardTableSkeleton } from "./dashboard-table-skeleton";
 import { DashboardTableRow } from "./dashboard-table-row";
 import { ColumnManagementModal } from "./column-management-modal";
-import { type ColumnId, useColumnsStore } from "@/stores/use-columns-store";
+import { type ColumnId } from '@/app/stores/use-table-store'
+import { useTableStore } from '@/app/stores/use-table-store'
 import {
   DndContext,
   type DragEndEvent,
@@ -37,40 +38,53 @@ interface ColumnWidthStore {
 
 export const useColumnWidthStore = create<ColumnWidthStore>((set) => ({
   widths: {
-    // Colunas padrão
+    event_id: 100,
+    event_name: 200,
+    event_time: 180,
+    user_id: 100,
+    profession_id: 150,
+    product_id: 150,
+    funnel_id: 150,
+    event_source: 150,
+    event_type: 150,
+    created_at: 180,
+    updated_at: 180,
+    user: 200,
+    profession: 150,
+    product: 150,
+    funnel: 150,
+    session: 200,
     fullname: 200,
-    initialProfession: 200,
-    initialFunnel: 200,
-    initialUtmMedium: 200,
-    initialUtmSource: 200,
-    initialUtmCampaign: 200,
-    initialUtmContent: 200,
-    initialUtmTerm: 200,
-    actions: 100,
-    // Colunas opcionais
+    email: 250,
     phone: 150,
+    profession_name: 200,
+    product_name: 200,
+    funnel_name: 200,
+    funnel_tag: 150,
+    initialProfession: 150,
+    isClient: 100,
+    initialDeviceType: 150,
+    initialFunnel: 150,
+    utm_source: 150,
+    utm_medium: 150,
+    utm_campaign: 150,
+    utm_content: 150,
+    utm_term: 150,
+    initialUtmSource: 150,
+    initialUtmMedium: 150,
+    initialUtmCampaign: 150,
+    initialUtmContent: 150,
+    initialUtmTerm: 150,
+    country: 150,
+    state: 150,
+    city: 150,
+    actions: 100,
     fbc: 150,
     fbp: 150,
-    created_at: 180,
     is_recent: 100,
-    initialCountry: 150,
-    initialCountryCode: 120,
-    initialRegion: 150,
-    initialCity: 150,
-    initialZip: 120,
-    initialIp: 150,
-    initialUserAgent: 200,
-    initialReferrer: 200,
-    initialTimezone: 150,
-    user_id: 100,
-    isIdentified: 120,
-    initialDeviceType: 150,
-    initialPlatform: 150,
-    initialBrowser: 150,
-    fullInitialReferrer: 200,
-    initialLandingPage: 200,
-    initialMarketingChannel: 200,
-    isClient: 120,
+    initialCountryCode: 150,
+    initialStateCode: 150,
+    initialCityCode: 150
   },
   updateWidth: (columnId, width) =>
     set((state) => ({
@@ -104,37 +118,52 @@ interface DashboardTableProps {
 
 // Mapeamento de todas as colunas para labels em português (removendo actions)
 const EXPORT_COLUMNS_MAP: Record<Exclude<ColumnId, 'actions'>, string> = {
+  event_id: 'ID do Evento',
+  event_name: 'Nome do Evento',
+  event_time: 'Data do Evento',
+  user_id: 'ID do Usuário',
+  profession_id: 'ID da Profissão',
+  product_id: 'ID do Produto',
+  funnel_id: 'ID do Funil',
+  event_source: 'Origem do Evento',
+  event_type: 'Tipo do Evento',
+  created_at: 'Data de Criação',
+  updated_at: 'Data de Atualização',
+  user: 'Usuário',
+  profession: 'Profissão',
+  product: 'Produto',
+  funnel: 'Funil',
+  session: 'Sessão',
   fullname: 'Nome Completo',
-  initialProfession: 'Profissão',
-  initialFunnel: 'Funil',
-  initialUtmMedium: 'UTM Medium',
-  initialUtmSource: 'UTM Source',
-  initialUtmCampaign: 'UTM Campaign',
-  initialUtmContent: 'UTM Content',
-  initialUtmTerm: 'UTM Term',
+  email: 'Email',
   phone: 'Telefone',
+  profession_name: 'Nome da Profissão',
+  product_name: 'Nome do Produto',
+  funnel_name: 'Nome do Funil',
+  funnel_tag: 'Tag do Funil',
+  initialProfession: 'Profissão Inicial',
+  isClient: 'É Cliente',
+  initialDeviceType: 'Tipo de Dispositivo',
+  initialFunnel: 'Funil Inicial',
+  utm_source: 'UTM Source',
+  utm_medium: 'UTM Medium',
+  utm_campaign: 'UTM Campaign',
+  utm_content: 'UTM Content',
+  utm_term: 'UTM Term',
+  initialUtmSource: 'UTM Source Inicial',
+  initialUtmMedium: 'UTM Medium Inicial',
+  initialUtmCampaign: 'UTM Campaign Inicial',
+  initialUtmContent: 'UTM Content Inicial',
+  initialUtmTerm: 'UTM Term Inicial',
+  country: 'País',
+  state: 'Estado',
+  city: 'Cidade',
   fbc: 'FBC',
   fbp: 'FBP',
-  created_at: 'Data de Criação',
   is_recent: 'É Recente',
-  initialCountry: 'País',
   initialCountryCode: 'Código do País',
-  initialRegion: 'Região',
-  initialCity: 'Cidade',
-  initialZip: 'CEP',
-  initialIp: 'IP',
-  initialUserAgent: 'User Agent',
-  initialReferrer: 'Referência',
-  initialTimezone: 'Fuso Horário',
-  user_id: 'ID do Usuário',
-  isIdentified: 'Está Identificado',
-  initialDeviceType: 'Tipo de Dispositivo',
-  initialPlatform: 'Plataforma',
-  initialBrowser: 'Navegador',
-  fullInitialReferrer: 'Referência Completa',
-  initialLandingPage: 'Página de Destino',
-  initialMarketingChannel: 'Canal de Marketing',
-  isClient: 'É Cliente'
+  initialStateCode: 'Código do Estado',
+  initialCityCode: 'Código da Cidade'
 };
 
 // Função utilitária para converter para CSV
@@ -246,7 +275,7 @@ export function DashboardTable({
   sortColumn,
   sortDirection,
 }: DashboardTableProps) {
-  const { visibleColumns, setVisibleColumns } = useColumnsStore();
+  const { visibleColumns, setVisibleColumns } = useTableStore();
   const { widths, updateWidth } = useColumnWidthStore();
   const [mounted, setMounted] = useState(false);
   const tableRef = useRef<HTMLTableElement>(null);
@@ -361,8 +390,12 @@ export function DashboardTable({
           Colunas
         </Button>
         <ColumnManagementModal 
-          open={isModalOpen}
-          onOpenChange={setIsModalOpen}
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          visibleColumns={visibleColumns as string[]}
+          onColumnChange={(newColumns) => {
+            setVisibleColumns(newColumns as ColumnId[])
+          }}
         />
       </div>
 

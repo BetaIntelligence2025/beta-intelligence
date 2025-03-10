@@ -43,13 +43,9 @@ export default function RootLayout({
                         {!hasEnvVars ? <EnvVarWarning /> : <HeaderAuth />}
                       </div>
                     </nav>
-                    <div className="flex-1 flex flex-col items-center p-5">
-                      <div className="flex flex-col w-full">{children}</div>
+                    <div className="flex-1 h-full flex flex-col items-center p-5">
+                      <div className="flex flex-col w-full h-full">{children}</div>
                     </div>
-                    <footer className="w-full flex items-center justify-center border-t mx-auto text-center text-xs gap-8 py-16">
-                      <p>Powered by Beta</p>
-                      <ThemeSwitcher />
-                    </footer>
                   </main>
                 </SidebarInset>
               </div>

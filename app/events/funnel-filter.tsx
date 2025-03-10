@@ -1,91 +1,90 @@
 'use client'
 
-import { useEffect, useState } from "react"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-
-interface Funnel {
-  funnel_id: number
-  funnel_name: string
-  funnel_tag: string
-  created_at: string
-}
-
-interface FunnelResponse {
-  data: Funnel[]
-  meta: {
-    last_page: number
-    limit: number
-    page: number
-    total: number
-    valid_sort_fields: string[]
-  }
-}
+import { useState, useEffect } from "react"
+import { useQuery } from "@tanstack/react-query"
+import { Button } from "@/components/ui/button"
+import { Filter } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 interface FunnelFilterProps {
-  onFilterChange: (funnelId: string | null) => void
-  value?: string | null
+  onFilterChange?: (funnelIds: string[]) => void
+  values?: string[]
+  searchTerm?: string
 }
 
-export function FunnelFilter({ onFilterChange, value }: FunnelFilterProps) {
-  const [funnels, setFunnels] = useState<Funnel[]>([])
-  const [loading, setLoading] = useState(true)
-
+export function FunnelFilter({ 
+  onFilterChange,
+  values = [], 
+  searchTerm = ""
+}: FunnelFilterProps) {
+  const [selectedIds, setSelectedIds] = useState<string[]>(values)
+  
   useEffect(() => {
-    async function fetchFunnels() {
-      try {
-        const response = await fetch('/api/funnels')
-        const data: FunnelResponse = await response.json()
-        // Ordenar por funnel_name
-        const sortedFunnels = [...(data.data || [])].sort((a, b) => 
-          a.funnel_name.localeCompare(b.funnel_name)
-        )
-        setFunnels(sortedFunnels)
-      } catch (error) {
-        console.error('Error fetching funnels:', error)
-      } finally {
-        setLoading(false)
-      }
+    setSelectedIds(values)
+  }, [values])
+  
+  const { data: funnels, isLoading } = useQuery({
+    queryKey: ["funnels"],
+    queryFn: async () => {
+      const response = await fetch("/api/funnels")
+      const data = await response.json()
+      return data?.data || []
     }
+  })
 
-    fetchFunnels()
-  }, [])
+  const handleSelect = (id: string) => {
+    const newIds = selectedIds.includes(id)
+      ? selectedIds.filter(i => i !== id)
+      : [...selectedIds, id]
+    
+    setSelectedIds(newIds)
+    if (onFilterChange) {
+      onFilterChange(newIds)
+    }
+  }
+  
+  if (isLoading) {
+    return <div className="p-2 text-sm text-muted-foreground">Carregando...</div>
+  }
 
-  // Encontrar o nome do funil selecionado
-  const selectedFunnelName = value 
-    ? funnels.find(f => f.funnel_id.toString() === value)?.funnel_name 
-    : null
+  if (!Array.isArray(funnels) || funnels.length === 0) {
+    return <div className="p-2 text-sm text-muted-foreground">Nenhum funil encontrado</div>
+  }
 
-  if (loading) {
-    return <div>Carregando...</div>
+  const filteredFunnels = funnels
+    .filter(f => f && (f.funnel_id || f.id))
+    .filter(f => {
+      if (!searchTerm) return true
+      const name = f.funnel_tag || f.name || ""
+      return name.toLowerCase().includes(searchTerm.toLowerCase())
+    })
+
+  if (filteredFunnels.length === 0) {
+    return <div className="p-2 text-sm text-muted-foreground">Nenhum funil encontrado com esse termo</div>
   }
 
   return (
-    <Select 
-      value={value || 'all'}
-      onValueChange={(value) => onFilterChange(value === 'all' ? null : value)}
-    >
-      <SelectTrigger className="w-[280px]">
-        <SelectValue>
-          {selectedFunnelName || 'Todos os funis'}
-        </SelectValue>
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="all">Todos os funis</SelectItem>
-        {funnels.map((funnel) => (
-          <SelectItem 
-            key={funnel.funnel_id} 
-            value={funnel.funnel_id.toString()}
+    <div className="space-y-1 max-h-[400px] overflow-y-auto pr-2">
+      {filteredFunnels.map((f: any) => {
+        const id = String(f.funnel_id || f.id)
+        const name = f.funnel_tag || f.name || `Funil ${id}`
+        const isSelected = selectedIds.includes(id)
+        
+        return (
+          <Button
+            key={id}
+            variant="ghost"
+            className={cn(
+              "w-full justify-start text-sm h-8 gap-2",
+              isSelected && "bg-accent"
+            )}
+            onClick={() => handleSelect(id)}
           >
-            {funnel.funnel_name}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+            <Filter className="h-4 w-4 flex-shrink-0" />
+            {name}
+          </Button>
+        )
+      })}
+    </div>
   )
 } 

@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server"
 import axios from 'axios'
+import { API_ENDPOINTS } from '@/app/config/api'
 
 export async function GET() {
   try {
-    const response = await axios.get('http://localhost:8080/funnels', {
+    const response = await axios.get(API_ENDPOINTS.FUNNELS, {
       params: {
         page: 1,
         limit: 100,

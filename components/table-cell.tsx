@@ -1,59 +1,33 @@
 import { Button } from '@/components/ui/button'
 import { MoreHorizontal } from 'lucide-react'
 import { format } from 'date-fns'
-import { ColumnId } from '@/stores/use-columns-store'
-import { Resizer } from './resizer'
 import { useTableStore } from '@/app/stores/use-table-store'
+import { Resizer } from './resizer'
+import type { ColumnId } from '@/app/stores/use-table-store'
+import { useMemo } from 'react'
+import { User } from '@/types/users-type'
 
 interface TableCellProps {
   columnId: ColumnId
-  user: any
+  user: Partial<User>
 }
 
 export function TableCell({ columnId, user }: TableCellProps) {
-  const columnWidths = useTableStore((state) => state.columnWidths)
-  const isResizing = useTableStore((state) => state.isResizing)
-
-  const renderContent = () => {
+  const { columnWidths } = useTableStore()
+  
+  const content = useMemo(() => {
     switch (columnId) {
       case 'fullname':
         return user.fullname || '-'
+      case 'email':
+        return user.email || '-'
       case 'phone':
         return user.phone || '-'
-      case 'fbc':
-        return user.fbc || '-'
-      case 'fbp':
-        return user.fbp || '-'
-      case 'created_at':
-        return user.created_at 
-          ? format(new Date(user.created_at), 'dd/MM/yyyy HH:mm')
-          : '-'
-      case 'is_recent':
-        return user.is_recent ? 'Sim' : 'Não'
-      case 'initialProfession':
-        return user.initialProfession || '-'
-      case 'initialFunnel':
-        return user.initialFunnel || '-'
-      case 'initialUtmMedium':
-        return user.initialUtmMedium || '-'
-      case 'initialUtmSource':
-        return user.initialUtmSource || '-'
-      case 'initialUtmCampaign':
-        return user.initialUtmCampaign || '-'
-      case 'initialUtmContent':
-        return user.initialUtmContent || '-'
-      case 'initialUtmTerm':
-        return user.initialUtmTerm || '-'
-      case 'actions':
-        return (
-          <Button variant="ghost" size="icon">
-            <MoreHorizontal className="h-4 w-4" />
-          </Button>
-        )
       default:
-        return user[columnId] || '-'
+        const value = user[columnId as keyof User]
+        return typeof value === 'object' ? JSON.stringify(value) : String(value || '-')
     }
-  }
+  }, [columnId, user])
 
   return (
     <td
@@ -62,19 +36,10 @@ export function TableCell({ columnId, user }: TableCellProps) {
         minWidth: `${columnWidths[columnId]}px`,
         maxWidth: `${columnWidths[columnId]}px`,
       }}
-      className={`
-        px-4 py-2 
-        overflow-hidden text-ellipsis whitespace-nowrap 
-        border-r border-gray-200
-        ${isResizing ? 'select-none' : ''}
-      `}
+      className="relative px-6 py-4 text-sm text-gray-900 border-r last:border-r-0"
     >
-      <div className="flex items-center justify-between relative">
-        <div className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
-          {renderContent()}
-        </div>
-        <Resizer columnId={columnId} />
-      </div>
+      {content}
+      <Resizer columnId={columnId} />
     </td>
   )
 }

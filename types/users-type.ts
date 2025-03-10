@@ -1,45 +1,31 @@
 export interface User {
     userId: string
-    phone: string
-    fbc: string
-    fbp: string
-    createdAt: string // ISO date string
-    isRecent: boolean
     fullname: string
-    initialCountry: string
-    initialCountryCode: string
-    initialRegion: string
-    initialCity: string
-    initialZip: string
-    initialIp: string
-    initialUserAgent: string
-    initialReferrer: string
-    initialTimezone: string
-    isIdentified: boolean
+    email: string
+    phone: string
+    isClient: boolean
     initialDeviceType: string
-    initialPlatform: string
-    initialBrowser: string
-    initialLandingPage: string
-    initialMarketingChannel: string
     initialProfession: string
     initialFunnel: string
-    isClient: boolean
-    initialUtmSource: string
     initialUtmMedium: string
+    initialUtmSource: string
     initialUtmCampaign: string
     initialUtmContent: string
     initialUtmTerm: string
-    initialLandingSpecialPath: string
-    initialReferrerDomain: string
-    initialReferrerQuery: string
-    initialReferrerHostname: string
-    initialReferrerPath: string
-  }
-  
-  export interface FetchUserResponse {
+    initialCountryCode: string
+    initialStateCode: string
+    initialCityCode: string
+    fbc: string
+    fbp: string
+    is_recent: boolean
+    created_at: string
+    updated_at: string
+}
+
+export interface FetchUserResponse {
     users: User[]
     total: number
     page: number
     limit: number
     totalPages: number
-  }
+}

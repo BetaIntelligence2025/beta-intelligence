@@ -1,5 +1,5 @@
 import { TableCell } from '@/components/table-cell'
-import { ColumnId } from '@/stores/use-columns-store'
+import type { ColumnId } from '@/app/stores/use-table-store'
 import { User } from '@/types/users-type'
 import { Checkbox } from '@/components/ui/checkbox'
 

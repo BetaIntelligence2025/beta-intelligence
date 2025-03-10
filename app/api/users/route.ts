@@ -1,29 +1,35 @@
 import { NextRequest, NextResponse } from "next/server";
+import { API_ENDPOINTS, buildApiUrl, buildPaginationParams } from "@/app/config/api";
 
 export async function GET(request: NextRequest) {
   try {
-    const searchParams = request.nextUrl.searchParams;
-    const page = Number(searchParams.get("page")) || 1;
-    const limit = Number(searchParams.get("limit")) || 10;
+    const { searchParams } = new URL(request.url);
+    const page = searchParams.get("page") || "1";
+    const limit = searchParams.get("limit") || "10";
     const sortBy = searchParams.get("sortBy") || "created_at";
     const sortDirection = searchParams.get("sortDirection") || "desc";
-
-    const response = await fetch(`http://localhost:8080/users?page=${page}&limit=${limit}&sortBy=${sortBy}&sortDirection=${sortDirection}`);
+    
+    const params = buildPaginationParams(page, limit, sortBy, sortDirection);
+    const apiUrl = buildApiUrl(API_ENDPOINTS.USERS, params);
+    
+    const response = await fetch(apiUrl);
     
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw new Error(`API responded with status: ${response.status}`);
     }
 
     const data = await response.json();
-    return NextResponse.json({
-      users: data.users,
-      page: data.page,
-      limit: data.limit,
-      total: data.total,
-      totalPages: data.totalPages
-    });
+    return NextResponse.json(data);
   } catch (error) {
-    console.error("Erro ao buscar usuários:", error);
-    return NextResponse.json({ error: "Erro ao buscar usuários" }, { status: 500 });
+    console.error("Error fetching users:", error);
+    return NextResponse.json({
+      data: [],
+      meta: {
+        total: 0,
+        page: 1,
+        limit: 10,
+        last_page: 1
+      }
+    }, { status: 500 });
   }
 }

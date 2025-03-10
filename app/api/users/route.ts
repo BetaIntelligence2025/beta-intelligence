@@ -8,10 +8,19 @@ export async function GET(request: NextRequest) {
     const limit = searchParams.get("limit") || "10";
     const sortBy = searchParams.get("sortBy") || "created_at";
     const sortDirection = searchParams.get("sortDirection") || "desc";
+    const allTypes = searchParams.get("allTypes") === "true";
     
-    const params = buildPaginationParams(page, limit, sortBy, sortDirection);
+    const params = buildPaginationParams(
+      page, 
+      limit, 
+      sortBy, 
+      sortDirection,
+      allTypes ? "true" : undefined
+    );
+    
     const apiUrl = buildApiUrl(API_ENDPOINTS.USERS, params);
     
+    console.log(`Fazendo requisição para: ${apiUrl}`);
     const response = await fetch(apiUrl);
     
     if (!response.ok) {
@@ -19,17 +28,33 @@ export async function GET(request: NextRequest) {
     }
 
     const data = await response.json();
-    return NextResponse.json(data);
+    console.log("Dados recebidos da API de usuários:", data);
+    
+    // Transformar o formato de dados para o formato esperado pelo componente
+    // Verificando se os dados já estão no formato correto ou se precisam ser transformados
+    const transformedData = {
+      users: Array.isArray(data.users) ? data.users : [],
+      total: data.total || 0,
+      page: data.page || parseInt(page),
+      limit: data.limit || parseInt(limit),
+      totalPages: data.totalPages || 1,
+      sortBy: data.sortBy || sortBy,
+      sortDirection: data.sortDirection || sortDirection
+    };
+    
+    console.log('Dados transformados para usuários:', transformedData);
+    
+    return NextResponse.json(transformedData);
   } catch (error) {
     console.error("Error fetching users:", error);
     return NextResponse.json({
-      data: [],
-      meta: {
-        total: 0,
-        page: 1,
-        limit: 10,
-        last_page: 1
-      }
+      users: [],
+      total: 0,
+      page: 1,
+      limit: 10,
+      totalPages: 1,
+      sortBy: 'created_at',
+      sortDirection: 'desc'
     }, { status: 500 });
   }
 }

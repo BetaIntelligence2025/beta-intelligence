@@ -89,7 +89,7 @@ export async function GET(request: NextRequest) {
     
     // Adicionar IDs de funil se existirem
     if (funnelId) {
-      params.funnel_ids = funnelId
+      params.funnel_ids = funnelId.split(',')
       console.log('Enviando funnel_ids:', params.funnel_ids)
     }
     

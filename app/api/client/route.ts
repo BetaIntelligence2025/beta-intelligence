@@ -12,6 +12,7 @@ export async function GET(request: NextRequest) {
     const params = buildPaginationParams(page, limit, sortBy, sortDirection)
     const apiUrl = buildApiUrl(API_ENDPOINTS.CLIENT, params)
     
+    console.log(`Fazendo requisição para clientes: ${apiUrl}`)
     const response = await fetch(apiUrl, {
       headers: {
         'Accept': 'application/json',
@@ -24,17 +25,33 @@ export async function GET(request: NextRequest) {
     }
     
     const data = await response.json()
-    return NextResponse.json(data)
+    console.log('Dados recebidos da API de clientes:', data)
+    
+    // Transformar o formato de dados para o formato esperado pelo componente
+    // Usando o campo "clients" da resposta da API
+    const transformedData = {
+      users: Array.isArray(data.clients) ? data.clients : [],
+      total: data.total || 0,
+      page: data.page || parseInt(page),
+      limit: data.limit || parseInt(limit),
+      totalPages: data.totalPages || 1,
+      sortBy: data.sortBy || sortBy,
+      sortDirection: data.sortDirection || sortDirection
+    }
+    
+    console.log('Dados transformados para clientes:', transformedData);
+    
+    return NextResponse.json(transformedData)
   } catch (error) {
     console.error('Error fetching clients:', error)
     return NextResponse.json({
-      data: [],
-      meta: {
-        total: 0,
-        page: 1,
-        limit: 10,
-        last_page: 1
-      }
+      users: [],
+      total: 0,
+      page: 1,
+      limit: 10,
+      totalPages: 1,
+      sortBy: 'created_at',
+      sortDirection: 'desc'
     }, { status: 500 })
   }
 }

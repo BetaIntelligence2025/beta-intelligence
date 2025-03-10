@@ -1,7 +1,8 @@
 import type { Config } from "tailwindcss";
 
 const config = {
-  darkMode: ["class"],
+  // Removendo o darkMode para que o tema escuro não seja aplicado
+  // darkMode: ["class"],
   content: [
     "./pages/**/*.{ts,tsx}",
     "./components/**/*.{ts,tsx}",

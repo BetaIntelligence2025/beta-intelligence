@@ -16,9 +16,20 @@ export function middleware(request: NextRequest) {
     }
     
     // Aqui você pode adicionar a lógica de verificação do token
+    // Não limitamos a verificação a um domínio específico
   }
   
-  return NextResponse.next()
+  // Adicionar cabeçalhos CORS para permitir solicitações de qualquer origem
+  const response = NextResponse.next()
+  
+  // Permitir solicitações de qualquer origem
+  response.headers.set('Access-Control-Allow-Origin', '*')
+  // Permitir métodos específicos
+  response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+  // Permitir cabeçalhos específicos
+  response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+  
+  return response
 }
 
 export const config = {

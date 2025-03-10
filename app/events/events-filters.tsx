@@ -133,8 +133,8 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
     
     if (onFilterChange) {
       onFilterChange({
-        professionId: professionIds.length > 0 ? professionIds[0] : null,
-        funnelId: funnelIds.length > 0 ? funnelIds[0] : null,
+        professionId: professionIds.length > 0 ? professionIds.join(',') : null,
+        funnelId: funnelIds.length > 0 ? funnelIds.join(',') : null,
         dateFrom: dateRange?.from ? dateRange.from.toISOString() : null,
         dateTo: dateRange?.to ? dateRange.to.toISOString() : null,
         timeFrom: dateRange?.fromTime || null,
@@ -421,8 +421,8 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
                       // Notificar mudança
                       if (onFilterChange) {
                         onFilterChange({
-                          professionId: professionIds.length > 0 ? professionIds[0] : null,
-                          funnelId: funnelIds.length > 0 ? funnelIds[0] : null,
+                          professionId: professionIds.length > 0 ? professionIds.join(',') : null,
+                          funnelId: funnelIds.length > 0 ? funnelIds.join(',') : null,
                           dateFrom: null,
                           dateTo: null,
                           timeFrom: null,
@@ -494,8 +494,8 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
                   // Notificar mudança
                   if (onFilterChange) {
                     onFilterChange({
-                      professionId: professionIds.length > 0 ? professionIds[0] : null,
-                      funnelId: funnelIds.length > 0 ? funnelIds[0] : null,
+                      professionId: professionIds.length > 0 ? professionIds.join(',') : null,
+                      funnelId: funnelIds.length > 0 ? funnelIds.join(',') : null,
                       dateFrom: null,
                       dateTo: null,
                       timeFrom: null,

@@ -20,13 +20,69 @@ interface FilteredData {
   limit: number;
 }
 
-const fetchUsers = async (page = 1, limit = 10): Promise<FetchUserResponse> => {
+// Função para buscar dados com base no filtro selecionado
+const fetchFilteredData = async (
+  filter: string, 
+  page: number, 
+  limit: number, 
+  sortBy?: string | null, 
+  sortDirection?: 'asc' | 'desc' | null,
+  token?: string | null
+): Promise<FetchUserResponse> => {
+  let endpoint = '/api/users'; // default endpoint
+  
+  switch (filter) {
+    case 'leads':
+      endpoint = '/api/lead';
+      break;
+    case 'clients':
+      endpoint = '/api/client';
+      break;
+    case 'anonymous':
+      endpoint = '/api/anonymous';
+      break;
+    case 'all':
+      // Para o filtro "all", vamos usar o endpoint de usuários
+      // No futuro, podemos implementar um endpoint específico que combine todos os tipos
+      endpoint = '/api/users';
+      break;
+    case 'users':
+    default:
+      endpoint = '/api/users';
+      break;
+  }
+  
+  const config: any = {
+    params: {
+      page,
+      limit,
+      sortBy: sortBy || undefined,
+      sortDirection: sortDirection || undefined,
+      // Adicionar um parâmetro para indicar que queremos todos os tipos quando o filtro é 'all'
+      allTypes: filter === 'all' ? 'true' : undefined
+    }
+  };
+  
+  // Adiciona o token de autorização para endpoints que não são anônimos
+  if (filter !== 'anonymous' && token) {
+    config.headers = {
+      'Authorization': `Bearer ${token}`
+    };
+  }
+  
   try {
-    const { data } = await axios.get<FetchUserResponse>("/api/users", {
-      params: { page, limit },
-    });
+    console.log(`Buscando dados do endpoint ${endpoint} com config:`, config);
+    const { data } = await axios.get(endpoint, config);
+    console.log(`Dados recebidos do endpoint ${endpoint}:`, data);
+    
+    // Verificar se os dados estão no formato esperado
+    if (!data.users) {
+      console.warn(`Aviso: O endpoint ${endpoint} não retornou dados no campo 'users'. Dados recebidos:`, data);
+    }
+    
     return data;
   } catch (error) {
+    console.error(`Erro ao buscar dados do endpoint ${endpoint}:`, error);
     throw error;
   }
 };
@@ -34,16 +90,10 @@ const fetchUsers = async (page = 1, limit = 10): Promise<FetchUserResponse> => {
 export default function ProtectedPage() {
   const supabase = createClient();
   const [currentPage, setCurrentPage] = useState(1);
-  const ITEMS_PER_PAGE = 10;
-  const [filter, setFilter] = useState('leads')
-  const [filteredData, setFilteredData] = useState<FilteredData>({ 
-    user: [], 
-    page: 1, 
-    total: 0, 
-    totalPages: 0, 
-    limit: ITEMS_PER_PAGE 
-  })
-  const [loading, setLoading] = useState(true)
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [filter, setFilter] = useState('users');
+  const [token, setToken] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [sortConfig, setSortConfig] = useState<{
     column: string | null;
     direction: 'asc' | 'desc' | null;
@@ -52,98 +102,68 @@ export default function ProtectedPage() {
     direction: null
   });
 
-  const { data: users, isLoading, error, refetch } = useQuery({
-    queryKey: ["users", currentPage],
-    queryFn: () => fetchUsers(currentPage, ITEMS_PER_PAGE),
-    refetchOnWindowFocus: false,
-  });
-
+  // Obter o token de autenticação
   useEffect(() => {
-    async function fetchData() {
-      setLoading(true)
+    async function getToken() {
       try {
-        const { data: { session } } = await supabase.auth.getSession()
-        
-        if (!session?.access_token) {
-          throw new Error('Não autorizado - Token não encontrado')
-        }
-
-        const config = {
-          headers: {
-            'Authorization': session.access_token
-          },
-          params: {
-            page: currentPage,
-            limit: ITEMS_PER_PAGE
-          }
-        }
-
-        let response;
-
-        switch (filter) {
-          case 'leads':
-            response = await axios.get('/api/lead', config)
-            break
-
-          case 'clients':
-            response = await axios.get('/api/client', config)
-            break
-
-          case 'anonymous':
-            response = await axios.get('/api/anonymous', {
-              params: { page: currentPage, limit: ITEMS_PER_PAGE }
-            })
-            break
-
-          default:
-            setFilteredData({ 
-              user: users?.users || [],
-              page: users?.page || 1,
-              total: users?.total || 0,
-              totalPages: users?.totalPages || 0,
-              limit: users?.limit || ITEMS_PER_PAGE
-            })
-            setLoading(false)
-            return
-        }
-
-        if (response?.data?.error) {
-          throw new Error(response.data.error)
-        }
-
-        setFilteredData({
-          user: response.data.users,
-          page: response.data.page,
-          total: response.data.total,
-          totalPages: response.data.totalPages,
-          limit: response.data.limit
-        })
-
-      } catch (error) {
-        if (axios.isAxiosError(error)) {
-          console.error('Erro na requisição:', {
-            name: error.name,
-            message: error.message,
-            response: error.response
-          })
+        const { data: { session } } = await supabase.auth.getSession();
+        console.log('Sessão obtida:', session ? 'Sim' : 'Não');
+        if (session?.access_token) {
+          console.log('Token obtido com sucesso');
+          setToken(session.access_token);
         } else {
-          console.error('Erro desconhecido:', String(error))
+          console.log('Nenhum token encontrado na sessão');
+          setToken(null);
         }
-        setFilteredData({ 
-          user: [],
-          page: 1,
-          total: 0,
-          totalPages: 0,
-          limit: ITEMS_PER_PAGE
-        })
-      } finally {
-        setLoading(false)
+      } catch (error) {
+        console.error('Erro ao obter token:', error);
+        setToken(null);
       }
     }
+    
+    getToken();
+  }, [supabase]);
 
-    fetchData()
-  }, [filter, users, currentPage])
+  // Usar o React Query para buscar dados
+  const { 
+    data: filteredData, 
+    isLoading: loading, 
+    error, 
+    refetch 
+  } = useQuery({
+    queryKey: ['filteredData', filter, currentPage, itemsPerPage, sortConfig, token],
+    queryFn: () => fetchFilteredData(
+      filter, 
+      currentPage, 
+      itemsPerPage, 
+      sortConfig.column, 
+      sortConfig.direction,
+      token
+    ),
+    enabled: !!token || filter === 'anonymous', // Só executa se tiver token ou for anônimo
+    refetchOnWindowFocus: false,
+    retry: 1
+  });
 
+  // Lidar com erros do React Query
+  useEffect(() => {
+    if (error) {
+      console.error('Erro do React Query:', error);
+      if (axios.isAxiosError(error)) {
+        const statusCode = error.response?.status;
+        const errorMessage = error.response?.data?.message || error.message;
+        console.error(`Erro Axios: ${statusCode} - ${errorMessage}`);
+        setErrorMessage(`Erro ao buscar dados: ${errorMessage} (${statusCode})`);
+      } else {
+        console.error('Erro desconhecido:', error);
+        setErrorMessage('Erro desconhecido ao buscar dados');
+      }
+    } else {
+      setErrorMessage(null);
+    }
+  }, [error]);
+
+  // Redirecionar se não estiver autenticado
   if (!supabase.auth.getUser()) {
     return redirect("/sign-in");
   }
@@ -154,138 +174,53 @@ export default function ProtectedPage() {
 
   const handlePerPageChange = async (newPerPage: number) => {
     console.log("handlePerPageChange chamado com:", newPerPage);
-    
-    // Atualiza o estado local primeiro
-    setFilteredData(prev => {
-      console.log("Estado anterior:", prev);
-      const updated = {
-        ...prev,
-        limit: newPerPage
-      };
-      console.log("Novo estado:", updated);
-      return updated;
-    });
-    
+    // Atualizar o número de itens por página
+    setItemsPerPage(newPerPage);
     // Reset para a primeira página
     setCurrentPage(1);
-    
-    // Inicia a busca com novo valor
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      console.log("Sessão encontrada:", !!session);
-      
-      // Simplificado para depuração - usar a função fetchData existente
-      const fetchWithNewLimit = async () => {
-        setLoading(true);
-        
-        try {
-          let endpoint = filter === 'leads' ? '/api/lead' : 
-                        filter === 'clients' ? '/api/client' : 
-                        filter === 'anonymous' ? '/api/anonymous' : '/api/usuarios';
-          
-          let config = {
-            headers: filter !== 'anonymous' ? 
-                    { 'Authorization': `Bearer ${session?.access_token}` } : {},
-            params: {
-              page: 1,
-              limit: newPerPage,
-              sortBy: sortConfig.column || undefined,
-              sortDirection: sortConfig.direction || undefined
-            }
-          };
-          
-          console.log("Fetch config:", config);
-          console.log("Endpoint:", endpoint);
-          
-          const response = await axios.get(endpoint, config);
-          console.log("Response:", response.data);
-          
-          setFilteredData({
-            user: response.data.users || [],
-            page: 1,
-            total: response.data.total || 0,
-            totalPages: response.data.totalPages || 0,
-            limit: newPerPage
-          });
-        } catch (error) {
-          console.error("Erro ao buscar com novo limite:", error);
-        } finally {
-          setLoading(false);
-        }
-      };
-      
-      fetchWithNewLimit();
-    } catch (error) {
-      console.error("Erro ao obter sessão:", error);
-    }
   };
 
-  const meta = {
+  const handleSort = useCallback((columnId: string, direction: 'asc' | 'desc' | null) => {
+    setSortConfig({ column: columnId, direction });
+  }, []);
+
+  // Preparar os dados para exibição
+  const displayData: FilteredData = {
+    user: filteredData?.users || [],
     page: filteredData?.page || 1,
     total: filteredData?.total || 0,
     totalPages: filteredData?.totalPages || 0,
-    limit: filteredData?.limit || ITEMS_PER_PAGE,
+    limit: filteredData?.limit || itemsPerPage
   };
 
-  const handleSort = useCallback(async (columnId: string, direction: 'asc' | 'desc' | null) => {
-    setSortConfig({ column: columnId, direction });
-    setLoading(true);
-
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      const config: {
-        headers: { Authorization?: string },
-        params: any
-      } = {
-        headers: {
-          'Authorization': session?.access_token || ''
-        },
-        params: {
-          page: currentPage,
-          limit: ITEMS_PER_PAGE,
-          sortBy: columnId,
-          sortDirection: direction
-        }
-      };
-
-      let endpoint = '/api/users'; // default endpoint
-
-      switch (filter) {
-        case 'leads':
-          endpoint = '/api/lead';
-          break;
-        case 'clients':
-          endpoint = '/api/client';
-          break;
-        case 'anonymous':
-          endpoint = '/api/anonymous';
-          config.headers = {} as any;
-          break;
-      }
-
-      const response = await axios.get(endpoint, config);
-      
-      setFilteredData({
-        user: response.data.users,
-        page: response.data.page,
-        total: response.data.total,
-        totalPages: response.data.totalPages,
-        limit: response.data.limit
-      });
-    } catch (error) {
-      console.error('Erro ao ordenar:', error);
-      setFilteredData({ 
-        user: [],
-        page: 1,
-        total: 0,
-        totalPages: 0,
-        limit: ITEMS_PER_PAGE
-      });
-    } finally {
-      setLoading(false);
+  // Adicionar log para depuração
+  console.log('Dados filtrados:', filteredData);
+  console.log('Dados para exibição:', displayData);
+  
+  // Verificar se os dados estão no formato esperado
+  useEffect(() => {
+    if (filteredData && !filteredData.users) {
+      console.error('Erro: Os dados recebidos não contêm o campo "users":', filteredData);
+      setErrorMessage('Erro no formato dos dados recebidos. Verifique o console para mais detalhes.');
     }
-  }, [currentPage, filter, supabase]);
+  }, [filteredData]);
+
+  const meta = {
+    page: displayData.page,
+    total: displayData.total,
+    totalPages: displayData.totalPages,
+    limit: displayData.limit,
+  };
+
+  // Adicionar log para os dados passados para o DashboardTable
+  console.log('Dados passados para DashboardTable:', {
+    result: displayData,
+    isLoading: loading,
+    currentPage,
+    totalResults: displayData.user,
+    sortColumn: sortConfig.column,
+    sortDirection: sortConfig.direction
+  });
 
   return (
     <div className="flex-1 w-full flex flex-col">
@@ -298,16 +233,16 @@ export default function ProtectedPage() {
       </div>
       <div className="space-y-4 bg-white xl:space-y-6">
         <DashboardTable 
-          result={filteredData} 
+          result={displayData} 
           isLoading={loading} 
           onSort={handleSort}
           currentPage={currentPage}
-          totalResults={filteredData?.user || []}
+          totalResults={displayData.user}
           sortColumn={sortConfig.column}
           sortDirection={sortConfig.direction}
         />
 
-        {filteredData?.user?.length > 0 && (
+        {displayData.user.length > 0 && (
           <Pagination
             onPageChange={handlePageChange}
             onPerPageChange={handlePerPageChange}
@@ -317,9 +252,9 @@ export default function ProtectedPage() {
           />
         )}
 
-        {error && (
-          <div className="text-red-500 p-4">
-            Error fetching users. Please try again.
+        {errorMessage && (
+          <div className="text-red-500 p-4 bg-red-50 border border-red-200 rounded-md">
+            {errorMessage}
           </div>
         )}
       </div>

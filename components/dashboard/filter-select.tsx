@@ -14,6 +14,7 @@ export function FilterSelect({ value, onValueChange }: FilterSelectProps) {
       </SelectTrigger>
       <SelectContent>
         <SelectItem value="all">Todos</SelectItem>
+        <SelectItem value="users">Usuários</SelectItem>
         <SelectItem value="leads">Leads</SelectItem>
         <SelectItem value="clients">Clientes</SelectItem>
         <SelectItem value="anonymous">Anônimos</SelectItem>

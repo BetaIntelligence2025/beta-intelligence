@@ -1,6 +1,5 @@
 import { EnvVarWarning } from "@/components/env-var-warning"
 import HeaderAuth from "@/components/header-auth"
-import { ThemeSwitcher } from "@/components/theme-switcher"
 import { hasEnvVars } from "@/utils/supabase/check-env-vars"
 import { Geist } from "next/font/google"
 import { ThemeProvider } from "next-themes"
@@ -9,7 +8,9 @@ import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/s
 import { SidebarMenuLayout } from "@/components/sidebar-menu-layout"
 import { QueryProvider } from "@/providers/query-provider"
 
-const defaultUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000"
+const defaultUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.VERCEL_URL 
+  ? `https://${process.env.NEXT_PUBLIC_SITE_URL || process.env.VERCEL_URL}` 
+  : typeof window !== 'undefined' ? window.location.origin : "http://localhost:3000";
 
 export const metadata = {
   metadataBase: new URL(defaultUrl),
@@ -31,7 +32,7 @@ export default function RootLayout({
     <html lang="pt-br" className={geistSans.className} suppressHydrationWarning>
       <body className="bg-background text-foreground">
         <QueryProvider>
-          <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+          <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false} forcedTheme="light" disableTransitionOnChange>
             <SidebarProvider>
               <div className="flex h-screen w-full">
                 <SidebarMenuLayout />

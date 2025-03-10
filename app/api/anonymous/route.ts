@@ -12,24 +12,46 @@ export async function GET(request: NextRequest) {
     const params = buildPaginationParams(page, limit, sortBy, sortDirection)
     const apiUrl = buildApiUrl(API_ENDPOINTS.ANONYMOUS, params)
     
-    const response = await fetch(apiUrl)
+    console.log(`Fazendo requisição para anônimos: ${apiUrl}`)
+    const response = await fetch(apiUrl, {
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      }
+    })
     
     if (!response.ok) {
       throw new Error(`API responded with status: ${response.status}`)
     }
     
     const data = await response.json()
-    return NextResponse.json(data)
+    console.log('Dados recebidos da API de anônimos:', data)
+    
+    // Transformar o formato de dados para o formato esperado pelo componente
+    // Usando o campo "anonymous" da resposta da API
+    const transformedData = {
+      users: Array.isArray(data.anonymous) ? data.anonymous : [],
+      total: data.total || 0,
+      page: data.page || parseInt(page),
+      limit: data.limit || parseInt(limit),
+      totalPages: data.totalPages || 1,
+      sortBy: data.sortBy || sortBy,
+      sortDirection: data.sortDirection || sortDirection
+    }
+    
+    console.log('Dados transformados para anônimos:', transformedData);
+    
+    return NextResponse.json(transformedData)
   } catch (error) {
     console.error('Error fetching anonymous users:', error)
     return NextResponse.json({
-      data: [],
-      meta: {
-        total: 0,
-        page: 1,
-        limit: 10,
-        last_page: 1
-      }
+      users: [],
+      total: 0,
+      page: 1,
+      limit: 10,
+      totalPages: 1,
+      sortBy: 'created_at',
+      sortDirection: 'desc'
     }, { status: 500 })
   }
 }

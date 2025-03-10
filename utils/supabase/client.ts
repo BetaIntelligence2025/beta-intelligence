@@ -13,13 +13,16 @@ export const createClient = () => {
     supabaseKey!,
     {
       auth: {
+        flowType: 'pkce',
         persistSession: true,
         autoRefreshToken: true,
-        detectSessionInUrl: true,
+        detectSessionInUrl: true
       },
       global: {
-        fetch: fetch.bind(globalThis),
-      },
+        headers: {
+          'X-Client-Info': 'supabase-js/2.x'
+        }
+      }
     }
   );
 };

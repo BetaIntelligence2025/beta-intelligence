@@ -6,7 +6,7 @@ import axios from "axios";
 import { EventsTable } from "./events-table";
 import { Pagination } from "@/components/pagination";
 import { createClient } from "@/utils/supabase/client";
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, Suspense } from "react";
 import { redirect, useRouter, useSearchParams } from "next/navigation";
 import { FetchEventsResponse } from "../types/events-type";
 
@@ -40,7 +40,7 @@ const fetchEvents = async (page: number, limit: number, sortConfig: any, searchP
   return response.json();
 };
 
-export default function EventsPage() {
+function EventsContent() {
   const supabase = createClient();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -238,5 +238,13 @@ export default function EventsPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function EventsPage() {
+  return (
+    <Suspense fallback={<div className="flex justify-center py-8">Carregando...</div>}>
+      <EventsContent />
+    </Suspense>
   );
 }

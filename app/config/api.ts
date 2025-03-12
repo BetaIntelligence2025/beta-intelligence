@@ -3,9 +3,12 @@
  */
 
 // URL base da API com base no ambiente
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || (process.env.NODE_ENV === 'production' 
-  ? 'http://130.211.239.149'
-  : 'http://localhost:8080');
+export const API_BASE_URL = process.env.NODE_ENV === 'production'
+  ? process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'
+  : 'http://localhost:8080';
+
+// Log da URL base sendo usada
+console.log(`API configurada com URL base: ${API_BASE_URL} (ambiente: ${process.env.NODE_ENV})`);
 
 // URLs específicas para cada endpoint
 export const API_ENDPOINTS = {

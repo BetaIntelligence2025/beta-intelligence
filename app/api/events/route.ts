@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import axios from 'axios'
+import { API_ENDPOINTS } from '@/app/config/api'
 
-// Configuração do endpoint do backend
-const API_BASE_URL = 'http://localhost:8080'
-const EVENTS_ENDPOINT = `${API_BASE_URL}/events`
+// Usar a configuração centralizada de API
+const EVENTS_ENDPOINT = API_ENDPOINTS.EVENTS
+
+console.log(`API configurada para usar: ${EVENTS_ENDPOINT}`)
 
 export async function GET(request: NextRequest) {
   try {

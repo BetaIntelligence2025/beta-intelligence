@@ -19,12 +19,12 @@ import {
   verticalListSortingStrategy 
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import { GripVertical } from "lucide-react"
+import { GripVertical, RotateCcw } from "lucide-react"
+import { useColumnsStore } from "./stores/columns-store"
 
 interface ColumnManagementModalProps {
   isOpen: boolean
   onClose: () => void
-  visibleColumns: string[]
   onColumnChange: (columns: string[]) => void
 }
 
@@ -68,9 +68,9 @@ function SortableItem({ id, label, isActive, onToggle }: SortableItemProps) {
 export function ColumnManagementModal({ 
   isOpen, 
   onClose, 
-  visibleColumns, 
   onColumnChange 
 }: ColumnManagementModalProps) {
+  const { visibleColumns, setVisibleColumns, resetToDefault } = useColumnsStore()
   const [availableColumns, setAvailableColumns] = useState<Array<{id: string, header: string, isVisible: boolean}>>([])
   const [pendingChanges, setPendingChanges] = useState<string[] | null>(null)
   
@@ -100,10 +100,11 @@ export function ColumnManagementModal({
   // Aplica alterações pendentes
   useEffect(() => {
     if (pendingChanges) {
-      onColumnChange(pendingChanges)
+      setVisibleColumns(pendingChanges) // Salva no Zustand
+      onColumnChange(pendingChanges) // Notifica componente pai
       setPendingChanges(null)
     }
-  }, [pendingChanges, onColumnChange])
+  }, [pendingChanges, onColumnChange, setVisibleColumns])
   
   // Toggle de coluna
   const handleToggleColumn = (id: string) => {
@@ -137,10 +138,15 @@ export function ColumnManagementModal({
           .filter(col => col.isVisible)
           .map(col => col.id)
         
-        setPendingChanges(newVisibleColumns) // Usa pendingChanges em vez de chamar diretamente
+        setPendingChanges(newVisibleColumns)
         return newItems
       })
     }
+  }
+
+  const handleResetToDefault = () => {
+    resetToDefault()
+    onClose()
   }
 
   const sensors = useSensors(
@@ -184,7 +190,15 @@ export function ColumnManagementModal({
           </DndContext>
         </div>
         
-        <div className="mt-6 flex justify-end">
+        <div className="mt-6 flex justify-between">
+          <Button 
+            variant="outline" 
+            onClick={handleResetToDefault}
+            className="flex items-center gap-1"
+          >
+            <RotateCcw className="h-4 w-4" />
+            Restaurar Padrão
+          </Button>
           <Button onClick={onClose}>
             Fechar
           </Button>

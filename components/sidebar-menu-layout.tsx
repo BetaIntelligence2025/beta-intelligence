@@ -1,7 +1,8 @@
 "use client"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { Braces, LayoutDashboard, Users } from "lucide-react"
+import { usePathname, useRouter } from "next/navigation"
+import { Braces, LayoutDashboard, LogOut, Users } from "lucide-react"
+import { useEffect, useState } from "react"
 
 import {
   Sidebar,
@@ -10,10 +11,49 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarFooter,
 } from "@/components/ui/sidebar"
+import { createClient } from "@/utils/supabase/client"
+import { Button } from "@/components/ui/button"
+import { Avatar, AvatarFallback } from "./ui/avatar"
 
 export function SidebarMenuLayout() {
   const pathname = usePathname()
+  const router = useRouter()
+  const [user, setUser] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      setLoading(true)
+      try {
+        const supabase = createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        setUser(user)
+      } catch (error) {
+        console.error("Erro ao carregar usuário:", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchUser()
+  }, [])
+
+  const handleSignOut = async () => {
+    try {
+      const supabase = createClient()
+      await supabase.auth.signOut()
+      router.push("/sign-in")
+    } catch (error) {
+      console.error("Erro ao fazer logout:", error)
+    }
+  }
+
+  const getUserInitials = (email: string) => {
+    if (!email) return "U"
+    return email.charAt(0).toUpperCase()
+  }
 
   return (
     <Sidebar>
@@ -36,7 +76,7 @@ export function SidebarMenuLayout() {
       <SidebarContent className="px-3">
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild isActive={pathname === "/"}>
+            <SidebarMenuButton asChild isActive={pathname === "/dashboard"}>
               <Link href="/dashboard">
                 <LayoutDashboard className="mr-2 h-4 w-4" />
                 Dashboard
@@ -61,6 +101,41 @@ export function SidebarMenuLayout() {
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarContent>
+      <SidebarFooter className="px-3 py-4 border-t">
+        {user && (
+          <div className="flex items-center justify-between w-full">
+            <div className="flex items-center gap-2">
+              <Avatar className="h-8 w-8">
+                <AvatarFallback>{getUserInitials(user.email)}</AvatarFallback>
+              </Avatar>
+              <div className="flex flex-col">
+                <span className="text-sm font-medium truncate max-w-32">{user.email}</span>
+                <span className="text-xs text-muted-foreground">Logado</span>
+              </div>
+            </div>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={handleSignOut}
+              title="Sair"
+            >
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
+        {!user && !loading && (
+          <div className="w-full">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="w-full"
+              onClick={() => router.push("/sign-in")}
+            >
+              Fazer login
+            </Button>
+          </div>
+        )}
+      </SidebarFooter>
     </Sidebar>
   )
 }

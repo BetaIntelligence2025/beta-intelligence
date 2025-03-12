@@ -7,6 +7,7 @@ export interface Column {
   header: string
   accessorKey: string
   cell?: (props: { row: { getValue: (key: string) => any } }) => React.ReactNode
+  defaultVisible?: boolean
 }
 
 export const columns: Column[] = [
@@ -68,7 +69,14 @@ export const columns: Column[] = [
   {
     header: "Cliente",
     accessorKey: "user.isClient",
-    cell: ({ row }) => row.getValue("user.isClient") ? "Sim" : "Não"
+    cell: ({ row }) => {
+      const isClient = row.getValue("user.isClient")
+      if (isClient === true) {
+        return "Sim"
+      }else {
+        return "Não"
+      }
+    }
   },
   {
     header: "Profissão",
@@ -89,37 +97,46 @@ export const columns: Column[] = [
   {
     header: "UTM Source",
     accessorKey: "session.utm_source",
+    defaultVisible: false,
   },
   {
     header: "UTM Medium",
     accessorKey: "session.utm_medium",
+    defaultVisible: false,
   },
   {
     header: "UTM Campaign",
     accessorKey: "session.utm_campaign",
+    defaultVisible: false,
   },
   {
     header: "UTM Content",
     accessorKey: "session.utm_content",
+    defaultVisible: false,
   },
   {
     header: "UTM Term",
     accessorKey: "session.utm_term",
+    defaultVisible: false,
   },
   {
     header: "País",
     accessorKey: "session.country",
+    defaultVisible: false,
   },
   {
     header: "Estado",
     accessorKey: "session.state",
+    defaultVisible: false,
   },
   {
     header: "Cidade",
     accessorKey: "session.city",
+    defaultVisible: false,
   },
   {
     header: "Dispositivo",
     accessorKey: "user.initialDeviceType",
+    defaultVisible: false,
   }
 ] 

@@ -62,6 +62,7 @@ export const signUpAction = async (formData: FormData) => {
 export const signInAction = async (formData: FormData) => {
   const email = formData.get("email") as string;
   const password = formData.get("password") as string;
+  const redirectTo = formData.get("redirectTo") as string || "/dashboard";
   
   console.log("[SIGN-IN] Iniciando login com email:", email);
   
@@ -96,9 +97,8 @@ export const signInAction = async (formData: FormData) => {
     return encodedRedirect("error", "/sign-in", error.message);
   }
 
-  // Se login for bem-sucedido, redirecionar para dashboard
-  console.log("[SIGN-IN] Login bem-sucedido! Redirecionando para /dashboard");
-  return redirect("/dashboard");
+  // Se login for bem-sucedido, redirecionar para a página solicitada ou dashboard
+  return redirect(redirectTo);
 };
 
 export const forgotPasswordAction = async (formData: FormData) => {

@@ -1,98 +1,117 @@
-"use client";
+'use client'
 
+import { signInAction } from "@/app/actions";
 import { FormMessage, Message } from "@/components/form-message";
+import { SubmitButton } from "@/components/submit-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
-import { createClient } from "@/utils/supabase/client";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+import { useState, useEffect } from "react";
+import { LayoutDashboard } from "lucide-react";
+import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 
 export default function Login() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const searchParams = useSearchParams();
   const [message, setMessage] = useState<Message | null>(null);
-  const router = useRouter();
+  const redirectTo = searchParams.get('redirectTo') || '/dashboard';
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    setMessage(null);
+  useEffect(() => {
+    // Processar mensagens nos parâmetros de busca
+    const type = searchParams.get('type');
+    const text = searchParams.get('text');
     
-    try {
-      // Criar cliente Supabase diretamente no cliente
-      const supabase = createClient();
-      
-      // Tentar login diretamente no cliente
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-      
-      if (error) {
-        setMessage({
-          error: error.message
-        });
+    if (type && text) {
+      if (type === 'error') {
+        setMessage({ error: text });
+      } else if (type === 'success') {
+        setMessage({ success: text });
       } else {
-        // Login bem-sucedido, redirecionar para dashboard
-        router.push("/dashboard");
+        setMessage({ message: text });
       }
-    } catch (e) {
-      const errorMessage = e instanceof Error ? e.message : "Ocorreu um erro desconhecido";
-      setMessage({
-        error: errorMessage
-      });
-    } finally {
-      setIsLoading(false);
     }
-  };
+  }, [searchParams]);
 
   return (
-    <div className="flex flex-col md:flex-row gap-6 w-full">
-      <form onSubmit={handleLogin} className="items-center justify-center flex flex-col w-full">
-        <h1 className="text-2xl font-medium">Sign in</h1>
-        <div className="flex flex-col gap-2 [&>input]:mb-3 mt-8">
-          <Label htmlFor="email">Email</Label>
-          <Input 
-            id="email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@example.com" 
-            required 
-          />
-          <div className="flex justify-between items-center">
-            <Label htmlFor="password">Password</Label>
-            <Link
-              className="text-xs text-foreground underline"
-              href="/forgot-password"
-            >
-              Forgot Password?
-            </Link>
+    <div className="flex min-h-screen w-full justify-center items-center p-4 bg-gradient-to-b from-background to-muted/20">
+      <div className="w-full max-w-md animate-fadeIn">
+        <div className="flex justify-center mb-8">
+          <div className="flex items-center gap-2">
+            <div className="flex aspect-square size-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+              <LayoutDashboard className="size-5" />
+            </div>
+            <div className="flex flex-col">
+              <span className="font-bold text-xl"><span className="text-red-800">Beta</span> Intelligence</span>
+            </div>
           </div>
-          <Input
-            id="password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Your password"
-            required
-          />
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="bg-foreground text-background hover:bg-foreground/90 
-              inline-flex h-10 items-center justify-center rounded-md px-4 py-2 
-              text-sm font-medium transition-colors focus-visible:outline-none 
-              focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none 
-              disabled:opacity-50"
-          >
-            {isLoading ? 'Signing In...' : 'Sign in'}
-          </button>
-          {message && <FormMessage message={message} />}
         </div>
-      </form>
+        <Card className="border shadow-lg">
+          <CardHeader className="flex flex-col items-center space-y-2 pb-2">
+            <h1 className="text-2xl font-bold text-center">Bem-vindo</h1>
+            <p className="text-muted-foreground text-sm text-center">
+              Faça login para acessar o Beta Intelligence
+            </p>
+          </CardHeader>
+          <CardContent>
+            <form className="space-y-4" action={signInAction}>
+              <div className="space-y-2">
+                <Label htmlFor="email" className="text-sm font-medium">
+                  Email
+                </Label>
+                <Input 
+                  name="email" 
+                  id="email"
+                  placeholder="seu@email.com" 
+                  className="transition-all focus:ring-2 focus:ring-primary/20" 
+                  required 
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <Label htmlFor="password" className="text-sm font-medium">
+                    Senha
+                  </Label>
+                  <Link
+                    className="text-xs text-primary hover:underline transition-all"
+                    href="/forgot-password"
+                  >
+                    Esqueceu a senha?
+                  </Link>
+                </div>
+                <Input
+                  type="password"
+                  id="password"
+                  name="password"
+                  placeholder="Sua senha"
+                  className="transition-all focus:ring-2 focus:ring-primary/20"
+                  required
+                />
+              </div>
+              
+              <input type="hidden" name="redirectTo" value={redirectTo} />
+              
+              <SubmitButton 
+                pendingText="Entrando..." 
+                className="w-full bg-primary hover:bg-primary/90 transition-all"
+              >
+                Entrar
+              </SubmitButton>
+              
+              {message && (
+                <div className="animate-fadeIn">
+                  <FormMessage message={message} />
+                </div>
+              )}
+            </form>
+          </CardContent>
+          <CardFooter className="flex justify-center border-t pt-4">
+            <p className="text-xs text-muted-foreground">
+              Beta Intelligence &copy; {new Date().getFullYear()}
+            </p>
+          </CardFooter>
+        </Card>
+      </div>
     </div>
   );
 }

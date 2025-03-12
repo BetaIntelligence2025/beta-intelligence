@@ -60,7 +60,7 @@ export function ProfessionFilter({ onFilterChange, values = [], searchTerm = "" 
   }
 
   return (
-    <div className="space-y-1 max-h-[400px] overflow-y-auto pr-2">
+    <div className="space-y-1">
       {filteredProfessions.map((p: any) => {
         const id = String(p.profession_id || p.id)
         const name = p.profession_name || p.name || `Profissional ${id}`
@@ -71,8 +71,8 @@ export function ProfessionFilter({ onFilterChange, values = [], searchTerm = "" 
             key={id}
             variant="ghost"
             className={cn(
-              "w-full justify-start text-sm h-8 gap-2",
-              isSelected && "bg-accent"
+              "w-full justify-start text-sm h-8 gap-2 px-1",
+              isSelected && "bg-gray-100"
             )}
             onClick={() => handleSelect(id)}
           >

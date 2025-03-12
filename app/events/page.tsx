@@ -2,16 +2,16 @@
 
 import { PageHeader } from "@/components/page-header";
 import { useQuery } from "@tanstack/react-query";
-import axios from "axios";
 import { EventsTable } from "./events-table";
-import { Pagination } from "@/components/pagination";
 import { createClient } from "@/utils/supabase/client";
 import { useState, useCallback, useEffect, useRef, Suspense } from "react";
 import { redirect, useRouter, useSearchParams } from "next/navigation";
-import { FetchEventsResponse } from "../types/events-type";
 
-const fetchEvents = async (page: number, limit: number, sortConfig: any, searchParams: URLSearchParams) => {
-  // Criar uma nova instância de URLSearchParams para não modificar a original
+const fetchEvents = async ({ queryKey }: any) => {
+  const [_, page, limit, sortConfig, searchParamsString] = queryKey;
+  const searchParams = new URLSearchParams(searchParamsString);
+  
+  // Criar uma nova instância de URLSearchParams para a requisição
   const params = new URLSearchParams();
   
   // Adicionar parâmetros básicos
@@ -26,17 +26,18 @@ const fetchEvents = async (page: number, limit: number, sortConfig: any, searchP
     }
   }
   
-  // Adicionar todos os parâmetros da URL atual, incluindo profession_id e funnel_id
+  // Adicionar todos os parâmetros da URL atual
   for (const [key, value] of Array.from(searchParams.entries())) {
     if (key !== 'page' && key !== 'limit' && key !== 'sortBy' && key !== 'sortDirection') {
       params.set(key, value);
     }
   }
   
-  console.log('Fetching with params:', params.toString());
-  
   // Fazer a requisição com todos os parâmetros
   const response = await fetch(`/api/events?${params.toString()}`);
+  if (!response.ok) {
+    throw new Error('Falha ao buscar eventos');
+  }
   return response.json();
 };
 
@@ -44,18 +45,21 @@ function EventsContent() {
   const supabase = createClient();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [currentPage, setCurrentPage] = useState(1);
-  const [limit, setLimit] = useState(10);
+  const [currentPage, setCurrentPage] = useState(
+    Number(searchParams.get('page')) || 1
+  );
+  const [limit, setLimit] = useState(
+    Number(searchParams.get('limit')) || 10
+  );
   const [hasCalculatedLimit, setHasCalculatedLimit] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const [sortConfig, setSortConfig] = useState<{
     column: string | null;
     direction: 'asc' | 'desc' | null;
   }>({
-    column: null,
-    direction: null
+    column: searchParams.get('sortBy') as string | null,
+    direction: searchParams.get('sortDirection') as 'asc' | 'desc' | null
   });
-  const [filters, setFilters] = useState({});
 
   // Calcular linhas visíveis uma única vez na montagem
   useEffect(() => {
@@ -76,85 +80,53 @@ function EventsContent() {
       
       const visibleRows = Math.max(5, Math.floor((availableHeight - headerRowHeight) / rowHeight));
       
-      // Atualizar o limit apenas uma vez
-      setLimit(visibleRows);
-      setHasCalculatedLimit(true);
-      
-      // Atualizar URL
-      const params = new URLSearchParams(searchParams.toString());
-      params.set('limit', visibleRows.toString());
-      router.push(`/events?${params.toString()}`, { scroll: false });
+      // Só atualiza se o valor calculado for diferente do atual
+      if (visibleRows !== limit) {
+        setLimit(visibleRows);
+        setHasCalculatedLimit(true);
+        
+        // Atualizar URL apenas quando necessário
+        const params = new URLSearchParams(searchParams.toString());
+        params.set('limit', visibleRows.toString());
+        router.push(`/events?${params.toString()}`, { scroll: false });
+      } else {
+        setHasCalculatedLimit(true);
+      }
     };
     
     // Usar setTimeout para garantir que o layout está estável
     setTimeout(calculateVisibleRows, 100);
-  }, [hasCalculatedLimit, router, searchParams]);
+  }, [hasCalculatedLimit, limit, router, searchParams]);
 
-  // Adicione após a declaração dos estados
+  // Sincronizar o estado currentPage com o parâmetro page da URL
   useEffect(() => {
-    // Carregar filtros da URL ao inicializar
-    const fromParam = searchParams.get('from')
-    const toParam = searchParams.get('to')
-    const timeFromParam = searchParams.get('time_from')
-    const timeToParam = searchParams.get('time_to')
-    const professionIdParam = searchParams.get('profession_id')
-    const funnelIdParam = searchParams.get('funnel_id')
+    const pageParam = searchParams.get('page');
+    const pageNumber = pageParam ? parseInt(pageParam, 10) : 1;
     
-    // Criar o objeto de filtros
-    const filters: any = {}
-    
-    // Processar datas se existirem
-    if (fromParam || toParam) {
-      filters.dateRange = {}
-      
-      if (fromParam) {
-        filters.dateRange.from = new Date(fromParam)
-      }
-      
-      if (toParam) {
-        filters.dateRange.to = new Date(toParam)
-      }
-      
-      if (timeFromParam) {
-        filters.dateRange.fromTime = timeFromParam
-      }
-      
-      if (timeToParam) {
-        filters.dateRange.toTime = timeToParam
-      }
+    // Só atualiza se for diferente para evitar loops
+    if (pageNumber !== currentPage) {
+      console.log('Sincronizando currentPage com URL:', pageNumber);
+      setCurrentPage(pageNumber);
     }
-    
-    // Adicionar outros filtros
-    if (professionIdParam) {
-      filters.professionId = professionIdParam
-    }
-    
-    if (funnelIdParam) {
-      filters.funnelId = funnelIdParam
-    }
-    
-    // Aplicar os filtros se houver algum
-    if (Object.keys(filters).length > 0) {
-      setFilters(filters)
-    }
-    
-    // Atualizar a página atual com base no parâmetro da URL
-    const pageParam = Number(searchParams.get('page')) || 1
-    setCurrentPage(pageParam)
-  }, [searchParams])
+  }, [searchParams, currentPage]);
 
   if (!supabase.auth.getUser()) {
     return redirect("/sign-in");
   }
 
   const handlePageChange = useCallback((newPage: number) => {
-    setCurrentPage(newPage);
+    console.log('Page - handlePageChange chamado com página:', newPage);
+    
+    // Enviar um evento customizado para forçar refetch
+    const event = new CustomEvent('refetch-events');
+    window.dispatchEvent(event);
+    
+    // Atualizar a URL
     const params = new URLSearchParams(searchParams.toString());
     params.set('page', newPage.toString());
     router.push(`/events?${params.toString()}`, { scroll: false });
   }, [router, searchParams]);
 
-  // Adicione o handler para alteração de linhas por página
   const handlePerPageChange = useCallback((newLimit: number) => {
     setLimit(newLimit);
     setCurrentPage(1); // Reset para primeira página
@@ -167,43 +139,44 @@ function EventsContent() {
     router.push(`/events?${params.toString()}`, { scroll: false });
   }, [router, searchParams]);
 
-  // Modificar o useQuery para incluir os filtros na queryKey
-  const { data: eventsData, isLoading, error, refetch } = useQuery({
-    queryKey: ["events", currentPage, limit, sortConfig, searchParams.toString()],
-    queryFn: () => fetchEvents(currentPage, limit, sortConfig, searchParams),
-    // Adicionar esta opção para garantir que os dados sejam atualizados quando os filtros mudarem
-    refetchOnWindowFocus: false,
-    staleTime: 0
-  });
-
-  const handleSort = useCallback(async (columnId: string, direction: 'asc' | 'desc' | null) => {
+  const handleSort = useCallback((columnId: string, direction: 'asc' | 'desc' | null) => {
     setSortConfig({ column: columnId, direction });
-    try {
-      await axios.get('/api/events', {
-        params: {
-          page: currentPage,
-          limit,
-          sortBy: columnId,
-          sortDirection: direction
-        }
-      });
-      
-      refetch();
-    } catch (error) {
-      console.error('Error sorting events:', error);
-    }
-  }, [currentPage, limit, refetch]);
+    
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('sortBy', columnId);
+    params.set('sortDirection', direction || 'asc');
+    
+    router.push(`/events?${params.toString()}`, { scroll: false });
+  }, [router, searchParams]);
 
-  // Adicione este useEffect para ouvir o evento de refetch
+  // Buscar eventos com React Query
+  const { 
+    data: eventsData, 
+    isLoading, 
+    error,
+    refetch
+  } = useQuery({
+    queryKey: ["events", currentPage, limit, sortConfig, searchParams.toString()],
+    queryFn: async () => {
+      console.log('Buscando eventos para página:', currentPage)
+      return fetchEvents({ queryKey: ["events", currentPage, limit, sortConfig, searchParams.toString()] });
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutos
+    gcTime: 10 * 60 * 1000, // 10 minutos
+    refetchOnWindowFocus: false,
+  });
+  
+  // Adicionar listener para o evento customizado
   useEffect(() => {
-    const handleRefetch = () => {
+    const refetchHandler = () => {
+      console.log('Evento refetch-events recebido, recarregando dados...');
       refetch();
     };
     
-    window.addEventListener('refetch-events', handleRefetch);
+    window.addEventListener('refetch-events', refetchHandler);
     
     return () => {
-      window.removeEventListener('refetch-events', handleRefetch);
+      window.removeEventListener('refetch-events', refetchHandler);
     };
   }, [refetch]);
 
@@ -214,26 +187,26 @@ function EventsContent() {
       </div>
       <div className="flex-1 flex flex-col bg-white overflow-hidden">
         <EventsTable 
-          result={eventsData || { 
-            events: [],
-            meta: {
-              total: 0,
-              page: 1,
-              limit: limit,
-              last_page: 1
-            }
-          }} 
+          events={eventsData?.events || []}
+          meta={eventsData?.meta || {
+            total: 0,
+            page: currentPage,
+            limit: limit,
+            last_page: 1
+          }}
           isLoading={isLoading || !hasCalculatedLimit} 
           onSort={handleSort}
           onPerPageChange={handlePerPageChange}
           currentPage={currentPage}
           sortColumn={sortConfig.column}
           sortDirection={sortConfig.direction}
+          searchParams={searchParams.toString()}
+          onPageChange={handlePageChange}
         />
 
         {error && (
           <div className="text-red-500 p-4">
-            Error fetching events. Please try again.
+            Erro ao buscar eventos. Por favor, tente novamente.
           </div>
         )}
       </div>

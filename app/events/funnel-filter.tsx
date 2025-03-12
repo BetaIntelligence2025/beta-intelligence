@@ -64,7 +64,7 @@ export function FunnelFilter({
   }
 
   return (
-    <div className="space-y-1 max-h-[400px] overflow-y-auto pr-2">
+    <div className="space-y-1">
       {filteredFunnels.map((f: any) => {
         const id = String(f.funnel_id || f.id)
         const name = f.funnel_tag || f.name || `Funil ${id}`
@@ -75,8 +75,8 @@ export function FunnelFilter({
             key={id}
             variant="ghost"
             className={cn(
-              "w-full justify-start text-sm h-8 gap-2",
-              isSelected && "bg-accent"
+              "w-full justify-start text-sm h-8 gap-2 px-1",
+              isSelected && "bg-gray-100"
             )}
             onClick={() => handleSelect(id)}
           >

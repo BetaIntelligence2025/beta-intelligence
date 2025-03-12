@@ -21,24 +21,22 @@ import {
   useSortable,
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import { ArrowUpDown, ChevronDown, ChevronUp, DownloadIcon, Loader2 } from "lucide-react"
+import { ArrowUpDown, ChevronDown, ChevronUp, DownloadIcon, Loader2, FileIcon, FileArchiveIcon, FileText, Settings2 } from "lucide-react"
 import { Column } from "./columns"
 import { EventColumnId } from "../stores/use-events-columns-store"
 import { EventsFilters } from "./events-filters"
-import { DateRange } from "react-day-picker"
-import { format, parse } from "date-fns"
-import { debounce } from "lodash"
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from "@/components/ui/button"
 import { ColumnManagementModal } from "./column-management-modal"
 import { Pagination } from "@/components/pagination"
 import { Checkbox } from "@/components/ui/checkbox"
-import * as XLSX from 'xlsx'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { useColumnsStore } from "./stores/columns-store"
 
 interface SortableHeaderProps {
   column: Column;       
   sortColumn?: string | null;
-  sortDirection?: 'asc' | 'desc' | null;
+  sortDirection?: 'asc' | 'desc' | null | string;
   onSort: (columnId: string, direction: 'asc' | 'desc') => void;
 }
 
@@ -191,43 +189,53 @@ function SortableHeader({
   );
 }
 
-interface EventsTableProps {
-  result: {
-    events: Event[]
-    meta: {
-      total: number
-      page: number
-      limit: number
-      last_page: number
-      profession_id?: number
-      funnel_id?: number
-    }
-  }
-  isLoading: boolean
-  onSort: (columnId: string, direction: 'asc' | 'desc') => void
-  currentPage: number
-  sortColumn?: string | null
-  sortDirection?: 'asc' | 'desc' | null
-  onPerPageChange?: (perPage: number) => void
-  onExport?: (selectedEvents: Event[]) => void
+export interface Meta {
+  total: number
+  page: number
+  limit: number
+  last_page: number
+  profession_id?: number
+  funnel_id?: number
 }
 
-export function EventsTable({ 
-  result, 
-  isLoading, 
-  onSort, 
-  currentPage, 
-  sortColumn, 
+export interface EventsTableProps {
+  events: Event[]
+  isLoading: boolean
+  meta?: Meta
+  error?: any
+  searchParams: string
+  currentPage: number
+  sortColumn?: string | null
+  sortDirection?: 'asc' | 'desc' | string | null
+  onSort: (column: string, direction: 'asc' | 'desc') => void
+  onPerPageChange?: (perPage: number) => void
+  onExport?: (selectedEvents: Event[]) => void
+  onPageChange: (page: number) => void
+}
+
+export function EventsTable({
+  events,
+  isLoading,
+  meta,
+  searchParams,
+  currentPage,
+  sortColumn,
   sortDirection,
+  onSort,
   onPerPageChange,
-  onExport
+  onExport,
+  onPageChange
 }: EventsTableProps) {
   const router = useRouter()
-  const searchParams = useSearchParams()
-  const [columns, setColumns] = useState(defaultColumns)
-  const [events, setEvents] = useState<Event[]>(result?.events || [])
-  const [meta, setMeta] = useState(result?.meta)
-  const [loading, setLoading] = useState(false)
+  const { visibleColumns } = useColumnsStore()
+  
+  // Memorizar as colunas visíveis para evitar re-renderizações desnecessárias
+  const columnsData = useMemo(() => 
+    visibleColumns
+      .map(id => defaultColumns.find(col => col.accessorKey === id))
+      .filter(Boolean) as Column[], 
+  [visibleColumns])
+  
   const [exportAllLoading, setExportAllLoading] = useState(false)
   const [exportProgress, setExportProgress] = useState(0)
   const tableContainerRef = useRef<HTMLDivElement>(null)
@@ -238,14 +246,15 @@ export function EventsTable({
   const [selectedRows, setSelectedRows] = useState<Record<string, boolean>>({})
   const [selectAll, setSelectAll] = useState(false)
 
-  // Recupera filtros da URL
+  // Recupera filtros da URL - memoizado para evitar recriações desnecessárias
   const getFiltersFromUrl = useCallback(() => {
-    const from = searchParams.get('from')
-    const to = searchParams.get('to')
-    const timeFrom = searchParams.get('time_from')
-    const timeTo = searchParams.get('time_to')
-    const professionId = searchParams.get('profession_id')
-    const funnelId = searchParams.get('funnel_id')
+    const params = new URLSearchParams(searchParams);
+    const from = params.get('from');
+    const to = params.get('to');
+    const timeFrom = params.get('time_from');
+    const timeTo = params.get('time_to');
+    const professionId = params.get('profession_id');
+    const funnelId = params.get('funnel_id');
     
     return {
       dateFrom: from || undefined,
@@ -257,52 +266,19 @@ export function EventsTable({
     }
   }, [searchParams])
 
-  console.log(events)
-
   const updateUrl = useCallback((params: Record<string, string | null>) => {
-    const newSearchParams = new URLSearchParams(searchParams.toString())
+    const newSearchParams = new URLSearchParams(searchParams);
     
     Object.entries(params).forEach(([key, value]) => {
       if (value === null) {
-        newSearchParams.delete(key)
+        newSearchParams.delete(key);
       } else {
-        newSearchParams.set(key, value)
+        newSearchParams.set(key, value);
       }
-    })
+    });
 
-    router.push(`/events?${newSearchParams.toString()}`, { scroll: false })
-  }, [router, searchParams])
-
-  const fetchEvents = useCallback(async () => {
-    setLoading(true)
-    try {
-      const response = await fetch(`/api/events?${searchParams.toString()}`, {
-        headers: { 'Accept': 'application/json' },
-        cache: 'no-store'
-      })
-      
-      if (!response.ok) throw new Error('Erro ao buscar eventos')
-
-      const data = await response.json()
-      setEvents(data.events || [])
-      setMeta(data.meta)
-
-      // Se a página atual é maior que o total de páginas, volta para a última página
-      if (data.meta.page > data.meta.last_page) {
-        const newParams = new URLSearchParams(searchParams.toString())
-        newParams.set('page', String(data.meta.last_page))
-        router.push(`/events?${newParams.toString()}`, { scroll: false })
-      }
-    } catch (error) {
-      console.error('Error fetching events:', error)
-    } finally {
-      setLoading(false)
-    }
-  }, [searchParams, router])
-
-  useEffect(() => {
-    fetchEvents()
-  }, [fetchEvents])
+    router.push(`/events?${newSearchParams.toString()}`, { scroll: false });
+  }, [router, searchParams]);
 
   const handleFilterChange = useCallback((filters: { 
     dateFrom?: string | null | undefined;
@@ -312,9 +288,7 @@ export function EventsTable({
     professionId?: string | null | undefined; 
     funnelId?: string | null | undefined; 
   }) => {
-    console.log("Filtros alterados:", filters);
-    
-    const params = new URLSearchParams(searchParams.toString());
+    const params = new URLSearchParams(searchParams);
     
     // Preservar o parâmetro de página atual
     const currentPage = params.get('page') || '1';
@@ -373,41 +347,40 @@ export function EventsTable({
     // Garantir que o parâmetro de página seja mantido
     params.set('page', currentPage);
     
-    // Atualizar URL e forçar refetch apenas se houver mudança real nos parâmetros
-    const currentParams = new URLSearchParams(searchParams.toString());
+    // Atualizar URL
+    const currentParams = new URLSearchParams(searchParams);
     const paramsChanged = params.toString() !== currentParams.toString();
     
     if (paramsChanged) {
       router.push(`/events?${params.toString()}`, { scroll: false });
-      window.dispatchEvent(new CustomEvent('refetch-events'));
     }
   }, [router, searchParams]);
 
   const handleSort = useCallback((columnId: string) => {
-    const newParams = new URLSearchParams(searchParams.toString())
+    const newParams = new URLSearchParams(searchParams);
     
     // Se clicar na mesma coluna que já está ordenada
     if (sortColumn === columnId) {
       // Se estava ascendente, muda para descendente
       if (sortDirection === 'asc') {
-        newParams.set('sortDirection', 'desc')
-        newParams.set('sortBy', columnId)
+        newParams.set('sortDirection', 'desc');
+        newParams.set('sortBy', columnId);
       } 
       // Se estava descendente, muda para ascendente
       else if (sortDirection === 'desc') {
-        newParams.set('sortDirection', 'asc')
-        newParams.set('sortBy', columnId)
+        newParams.set('sortDirection', 'asc');
+        newParams.set('sortBy', columnId);
       }
     } 
     // Se clicar em uma nova coluna, começa com ascendente
     else {
-      newParams.set('sortDirection', 'asc')
-      newParams.set('sortBy', columnId)
+      newParams.set('sortDirection', 'asc');
+      newParams.set('sortBy', columnId);
     }
 
-    router.push(`/events?${newParams.toString()}`, { scroll: false })
-    onSort(columnId, newParams.get('sortDirection') as 'asc' | 'desc')
-  }, [router, searchParams, sortColumn, sortDirection, onSort])
+    router.push(`/events?${newParams.toString()}`, { scroll: false });
+    onSort(columnId, newParams.get('sortDirection') as 'asc' | 'desc');
+  }, [router, searchParams, sortColumn, sortDirection, onSort]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -418,16 +391,20 @@ export function EventsTable({
     })
   )
 
-  const handleDragEnd = useCallback((event: DragEndEvent) => {
-    const { active, over } = event
-    if (over && active.id !== over.id) {
-      const oldIndex = columns.findIndex(col => col.accessorKey === active.id)
-      const newIndex = columns.findIndex(col => col.accessorKey === over.id)
-      setColumns(arrayMove(columns, oldIndex, newIndex))
-    }
-  }, [columns])
-
-  const tableIsLoading = loading || isLoading
+  const handleDragEnd = (result: any) => {
+    if (!result.destination) return
+    
+    const newOrderColumns = [...visibleColumns]
+    const [reorderedItem] = newOrderColumns.splice(result.source.index, 1)
+    newOrderColumns.splice(result.destination.index, 0, reorderedItem)
+    
+    const newColumnsData = newOrderColumns
+      .map(id => defaultColumns.find(col => col.accessorKey === id))
+      .filter(Boolean) as Column[]
+    
+    useColumnsStore.setState({ visibleColumns: newOrderColumns })
+    // Não precisamos mais chamar setColumnsData pois o useMemo atualizará automaticamente
+  }
 
   // Calcular a quantidade de linhas que cabem na tela
   useEffect(() => {
@@ -437,9 +414,10 @@ export function EventsTable({
       const container = tableContainerRef.current
       const containerHeight = container.clientHeight
       const headerHeight = 48 // altura do cabeçalho
+      const paginationHeight = 56 // altura da paginação
       
       // Calcula quantas linhas cabem no espaço disponível
-      const availableHeight = containerHeight - headerHeight
+      const availableHeight = containerHeight - headerHeight - paginationHeight
       const calculatedRows = Math.floor(availableHeight / rowHeight)
       
       // No mínimo 5 linhas, ou usa o cálculo
@@ -466,24 +444,35 @@ export function EventsTable({
   // Atualiza o limite apenas quando marcado para atualizar
   useEffect(() => {
     if (shouldUpdateLimit) {
-      const currentLimit = Number(searchParams.get('limit') || 10)
+      const params = new URLSearchParams(searchParams);
+      const currentLimit = Number(params.get('limit') || 10);
       
       // Só atualiza se o limite calculado for diferente do atual
       if (visibleRows !== currentLimit) {
-        const params = new URLSearchParams(searchParams.toString())
-        params.set('limit', visibleRows.toString())
-        router.push(`/events?${params.toString()}`, { scroll: false })
+        const updateParams = new URLSearchParams(searchParams);
+        updateParams.set('limit', visibleRows.toString());
+        router.push(`/events?${updateParams.toString()}`, { scroll: false });
       }
       
-      setShouldUpdateLimit(false) // Reset a flag
+      setShouldUpdateLimit(false); // Reset a flag
     }
-  }, [shouldUpdateLimit, visibleRows, router, searchParams])
+  }, [shouldUpdateLimit, visibleRows, router, searchParams]);
 
   const handlePageChange = useCallback((page: number) => {
-    const params = new URLSearchParams(searchParams.toString());
+    console.log('EventsTable - handlePageChange chamado com página:', page);
+    
+    // Atualizar a URL
+    const params = new URLSearchParams(searchParams);
     params.set('page', page.toString());
+    
+    // Remover quaisquer parâmetros incorretos que possam estar causando problemas
+    params.delete('[object Object]');
+    
     router.push(`/events?${params.toString()}`, { scroll: false });
-  }, [router, searchParams]);
+    
+    // Chamar a função onPageChange do componente pai para sincronizar state
+    onPageChange(page);
+  }, [router, searchParams, onPageChange]);
 
   // Verificar se todos estão selecionados e atualizar o estado selectAll
   useEffect(() => {
@@ -528,11 +517,11 @@ export function EventsTable({
     }
     
     // Obter cabeçalhos das colunas visíveis
-    const headers = columns.map(column => column.header)
+    const headers = columnsData.map(column => column.header)
     
     // Formatar os dados para CSV
     const rows = selectedEvents.map(event => {
-      return columns.map(column => {
+      return columnsData.map(column => {
         const key = column.accessorKey
         let value = ''
         
@@ -597,11 +586,11 @@ export function EventsTable({
     }
     
     // Obter cabeçalhos das colunas visíveis
-    const headers = columns.map(column => column.header);
+    const headers = columnsData.map(column => column.header);
     
     // Formatar os dados para CSV
     const rows = events.map(event => {
-      return columns.map(column => {
+      return columnsData.map(column => {
         const key = column.accessorKey;
         let value = '';
         
@@ -821,7 +810,7 @@ export function EventsTable({
       }
       
       // Obter cabeçalhos das colunas visíveis
-      const headers = columns.map(column => column.header);
+      const headers = columnsData.map(column => column.header);
       
       // Iniciar com os cabeçalhos
       const csvRows = [headers.join(',')];
@@ -855,7 +844,7 @@ export function EventsTable({
         
         // Formatar os dados do lote para CSV
         const batchRows = batch.map((event: Event) => {
-          return columns.map(column => {
+          return columnsData.map(column => {
             const key = column.accessorKey;
             let value = '';
             
@@ -928,17 +917,9 @@ export function EventsTable({
       setExportAllLoading(false);
       setExportProgress(0);
     }
-  }, [columns, searchParams, meta]);
+  }, [columnsData, searchParams, meta]);
 
-  // No componente EventsTable, adicione este useEffect para atualizar os eventos quando result mudar
-  useEffect(() => {
-    if (result?.events) {
-      setEvents(result.events);
-      setMeta(result.meta);
-    }
-  }, [result]);
-
-  if (tableIsLoading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center p-4 min-h-[200px] bg-white shadow-md sm:rounded-lg">
         <div className="text-gray-500">Carregando eventos...</div>
@@ -958,7 +939,7 @@ export function EventsTable({
               funnelId: meta?.funnel_id?.toString()
             }} 
           />
-          {Object.keys(selectedRows).length > 0 && (
+          {Object.keys(selectedRows).filter(id => selectedRows[id]).length > 0 && (
             <span className="text-sm text-gray-500 ml-2">
               {Object.keys(selectedRows).filter(id => selectedRows[id]).length} selecionados
             </span>
@@ -976,47 +957,61 @@ export function EventsTable({
               Exportar selecionados
             </Button>
           )}
-          {events.length > 0 && (
-            <Button 
-              variant="outline" 
-              size="sm" 
+          <div className="flex items-center gap-1">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="flex items-center gap-1"
+                  disabled={exportAllLoading}
+                >
+                  {exportAllLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Exportando... {exportProgress > 0 ? `${exportProgress}%` : ''}</span>
+                    </>
+                  ) : (
+                    <>
+                      <DownloadIcon className="h-4 w-4" />
+                      <span>Exportar</span>
+                      <ChevronDown className="h-3 w-3 ml-1" />
+                    </>
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuItem onClick={handleExportCurrentPage} disabled={events.length === 0}>
+                  <FileIcon className="h-4 w-4 mr-2" />
+                  Exportar página atual
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportAll}>
+                  <FileArchiveIcon className="h-4 w-4 mr-2" />
+                  Exportar todos
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsColumnManagementOpen(true)}
               className="flex items-center gap-1"
-              onClick={handleExportCurrentPage}
             >
-              <DownloadIcon className="h-4 w-4" />
-              Exportar página atual
+              <Settings2 className="h-4 w-4" />
+              Colunas
             </Button>
-          )}
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className="flex items-center gap-1"
-            onClick={handleExportAll}
-            disabled={exportAllLoading}
-          >
-            {exportAllLoading ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span>Exportando... {exportProgress > 0 ? `${exportProgress}%` : ''}</span>
-              </>
-            ) : (
-              <>
-                <DownloadIcon className="h-4 w-4" />
-                <span>Exportar todos</span>
-              </>
-            )}
-          </Button>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={() => setIsColumnManagementOpen(true)}
-          >
-            Gerenciar Colunas
-          </Button>
+            <ColumnManagementModal
+              isOpen={isColumnManagementOpen}
+              onClose={() => setIsColumnManagementOpen(false)}
+              onColumnChange={(newColumns) => {
+                useColumnsStore.setState({ visibleColumns: newColumns })
+              }}
+            />
+          </div>
         </div>
       </div>
-      <div className="border rounded-md overflow-hidden flex-1">
-        <div className="overflow-auto h-[calc(100vh-250px)]">
+      <div className="border rounded-md overflow-hidden flex-1 flex flex-col">
+        <div className="overflow-auto flex-1" ref={tableContainerRef}>
           <DndContext 
             sensors={sensors} 
             collisionDetection={closestCenter} 
@@ -1035,15 +1030,15 @@ export function EventsTable({
                   </th>
                   {/* Restante das colunas */}
                   <SortableContext 
-                    items={columns.map(col => col.accessorKey)} 
+                    items={columnsData.map(col => col.accessorKey)} 
                     strategy={horizontalListSortingStrategy}
                   >
-                    {columns.map((column) => (
+                    {columnsData.map((column) => (
                       <SortableHeader
                         key={column.accessorKey}
                         column={column}
                         sortColumn={sortColumn}
-                        sortDirection={sortDirection}
+                        sortDirection={sortDirection as 'asc' | 'desc' | null}
                         onSort={handleSort}
                       />
                     ))}
@@ -1055,7 +1050,7 @@ export function EventsTable({
                   <EventsTableRow 
                     key={event.event_id}
                     event={event} 
-                    visibleColumns={columns.map(col => col.accessorKey as EventColumnId)}
+                    visibleColumns={columnsData.map(col => col.accessorKey as EventColumnId)}
                     isSelected={!!selectedRows[event.event_id]}
                     onSelectChange={toggleRowSelection}
                   />
@@ -1064,7 +1059,8 @@ export function EventsTable({
                 {Array.isArray(events) && events.length > 0 && events.length < visibleRows && (
                   Array.from({ length: visibleRows - events.length }).map((_, index) => (
                     <tr key={`empty-${index}`} className="h-[46px]">
-                      {columns.map((col) => (
+                      <td className="w-10 px-3 py-3.5 border-b"></td>
+                      {columnsData.map((col) => (
                         <td key={`empty-${index}-${col.accessorKey}`} className="px-4 py-2 border-b"></td>
                       ))}
                     </tr>
@@ -1073,7 +1069,7 @@ export function EventsTable({
                 {(!events || events.length === 0) && (
                   <tr>
                     <td 
-                      colSpan={columns.length} 
+                      colSpan={columnsData.length + 1} 
                       className="px-6 py-4 text-center text-gray-500 text-xs"
                     >
                       Nenhum evento encontrado
@@ -1087,7 +1083,7 @@ export function EventsTable({
         {/* Sempre exibir a paginação, mesmo quando não há resultados */}
         <div className="p-2 border-t bg-white">
           <Pagination
-            pageIndex={meta?.page || 1} 
+            pageIndex={currentPage} 
             totalCount={meta?.total || 0}
             perPage={meta?.limit || 10}
             onPageChange={handlePageChange}
@@ -1095,17 +1091,6 @@ export function EventsTable({
           />
         </div>
       </div>
-      <ColumnManagementModal
-        isOpen={isColumnManagementOpen}
-        onClose={() => setIsColumnManagementOpen(false)}
-        visibleColumns={columns.map(col => col.accessorKey)}
-        onColumnChange={(newColumns) => {
-          const newColumnList = newColumns.map(
-            id => defaultColumns.find(col => col.accessorKey === id)!
-          )
-          setColumns(newColumnList)
-        }}
-      />
     </div>
   )
 } 

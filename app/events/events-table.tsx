@@ -1003,6 +1003,7 @@ export function EventsTable({
             <ColumnManagementModal
               isOpen={isColumnManagementOpen}
               onClose={() => setIsColumnManagementOpen(false)}
+              visibleColumns={visibleColumns}
               onColumnChange={(newColumns) => {
                 useColumnsStore.setState({ visibleColumns: newColumns })
               }}

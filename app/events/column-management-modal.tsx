@@ -25,6 +25,7 @@ import { useColumnsStore } from "./stores/columns-store"
 interface ColumnManagementModalProps {
   isOpen: boolean
   onClose: () => void
+  visibleColumns: string[]
   onColumnChange: (columns: string[]) => void
 }
 
@@ -68,9 +69,10 @@ function SortableItem({ id, label, isActive, onToggle }: SortableItemProps) {
 export function ColumnManagementModal({ 
   isOpen, 
   onClose, 
+  visibleColumns, 
   onColumnChange 
 }: ColumnManagementModalProps) {
-  const { visibleColumns, setVisibleColumns, resetToDefault } = useColumnsStore()
+  const { setVisibleColumns, resetToDefault } = useColumnsStore()
   const [availableColumns, setAvailableColumns] = useState<Array<{id: string, header: string, isVisible: boolean}>>([])
   const [pendingChanges, setPendingChanges] = useState<string[] | null>(null)
   

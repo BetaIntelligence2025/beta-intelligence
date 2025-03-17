@@ -16,7 +16,7 @@ export default function Signup() {
   const [message, setMessage] = useState<Message | null>(null);
   const [email, setEmail] = useState("");
   const [isValidEmail, setIsValidEmail] = useState(true);
-  const redirectTo = searchParams.get('redirectTo') || '/events';
+  const redirectTo = searchParams.get('redirectTo') || '/dashboard';
 
   useEffect(() => {
     // Processar mensagens nos parâmetros de busca

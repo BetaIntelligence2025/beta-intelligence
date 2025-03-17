@@ -105,7 +105,15 @@ export default function Login() {
               )}
             </form>
           </CardContent>
-          <CardFooter className="flex justify-center border-t pt-4">
+          <CardFooter className="flex flex-col justify-center border-t pt-4 gap-3">
+            <div className="flex items-center justify-center w-full">
+              <p className="text-sm text-muted-foreground">
+                Não tem uma conta?{" "}
+                <Link href="/sign-up" className="text-primary font-medium hover:underline transition-all">
+                  Cadastre-se
+                </Link>
+              </p>
+            </div>
             <p className="text-xs text-muted-foreground">
               Beta Intelligence &copy; {new Date().getFullYear()}
             </p>

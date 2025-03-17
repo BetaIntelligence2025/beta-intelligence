@@ -68,7 +68,6 @@ const MultiSelector = ({
 
   const onValueChangeHandler = useCallback(
     (val: string) => {
-      console.log("Changing value:", val, "Current values:", value)
       if (value.includes(val)) {
         onValueChange(value.filter((item) => item !== val))
       } else {
@@ -351,7 +350,6 @@ const MultiSelectorItem = forwardRef<
   const isIncluded = Options.includes(value)
   
   const handleSelect = () => {
-    console.log("Item selected:", value)
     onValueChange(value)
     setInputValue("")
   }

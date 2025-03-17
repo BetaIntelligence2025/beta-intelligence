@@ -20,7 +20,6 @@ export async function GET(request: NextRequest) {
     
     const apiUrl = buildApiUrl(API_ENDPOINTS.USERS, params);
     
-    console.log(`Fazendo requisição para: ${apiUrl}`);
     const response = await fetch(apiUrl);
     
     if (!response.ok) {
@@ -28,7 +27,6 @@ export async function GET(request: NextRequest) {
     }
 
     const data = await response.json();
-    console.log("Dados recebidos da API de usuários:", data);
     
     // Transformar o formato de dados para o formato esperado pelo componente
     // Verificando se os dados já estão no formato correto ou se precisam ser transformados
@@ -42,7 +40,6 @@ export async function GET(request: NextRequest) {
       sortDirection: data.sortDirection || sortDirection
     };
     
-    console.log('Dados transformados para usuários:', transformedData);
     
     return NextResponse.json(transformedData);
   } catch (error) {

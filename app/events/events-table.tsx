@@ -33,6 +33,38 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useColumnsStore } from "./stores/columns-store"
 
+/**
+ * Função utilitária para converter datas para o formato BRT (horário de Brasília)
+ */
+function formatDateToBRT(dateStr: string): string {
+  try {
+    // Converter a string de data para objeto Date
+    const dateObj = new Date(dateStr);
+    
+    // Verificar se a data é válida
+    if (!isNaN(dateObj.getTime())) {
+      // Converter para o horário de Brasília (BRT, UTC-3)
+      const options: Intl.DateTimeFormatOptions = { 
+        timeZone: 'America/Sao_Paulo',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric', 
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      };
+      
+      return dateObj.toLocaleString('pt-BR', options);
+    }
+  } catch (error) {
+    console.error("Erro ao formatar data para BRT:", error);
+  }
+  
+  // Retornar o valor original se não conseguir converter
+  return dateStr;
+}
+
 interface SortableHeaderProps {
   column: Column;       
   sortColumn?: string | null;
@@ -459,7 +491,6 @@ export function EventsTable({
   }, [shouldUpdateLimit, visibleRows, router, searchParams]);
 
   const handlePageChange = useCallback((page: number) => {
-    console.log('EventsTable - handlePageChange chamado com página:', page);
     
     // Atualizar a URL
     const params = new URLSearchParams(searchParams);
@@ -545,6 +576,11 @@ export function EventsTable({
           value = event[eventKey] !== undefined ? String(event[eventKey]) : '-'
         }
         
+        // Formatação especial para campos de data (event_time)
+        if (key === 'event_time' && value && value !== '-') {
+          value = formatDateToBRT(value);
+        }
+        
         // Escapar vírgulas e aspas no valor para CSV
         return `"${value.replace(/"/g, '""')}"`
       }).join(',')
@@ -562,9 +598,11 @@ export function EventsTable({
     
     // Criar link para download
     const link = document.createElement('a')
-    const date = new Date().toISOString().split('T')[0]
+    const date = new Date()
+    // Formatar data no horário de Brasília para o nome do arquivo
+    const brazilDate = date.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }).replace(/\//g, '-')
     link.setAttribute('href', url)
-    link.setAttribute('download', `eventos_exportados_${date}.csv`)
+    link.setAttribute('download', `eventos_exportados_${brazilDate}.csv`)
     link.style.visibility = 'hidden'
     
     // Adicionar à página, clicar e remover
@@ -614,6 +652,11 @@ export function EventsTable({
           value = event[eventKey] !== undefined ? String(event[eventKey]) : '-';
         }
         
+        // Formatação especial para campos de data (event_time)
+        if (key === 'event_time' && value && value !== '-') {
+          value = formatDateToBRT(value);
+        }
+        
         // Escapar vírgulas e aspas no valor para CSV
         return `"${value.replace(/"/g, '""')}"`;
       }).join(',');
@@ -631,9 +674,11 @@ export function EventsTable({
     
     // Criar link para download
     const link = document.createElement('a');
-    const date = new Date().toISOString().split('T')[0];
+    // Formatar data no horário de Brasília para o nome do arquivo
+    const date = new Date()
+    const brazilDate = date.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }).replace(/\//g, '-')
     link.setAttribute('href', url);
-    link.setAttribute('download', `eventos_pagina_${meta?.page || 1}_${date}.csv`);
+    link.setAttribute('download', `eventos_pagina_${meta?.page || 1}_${brazilDate}.csv`);
     link.style.visibility = 'hidden';
     
     // Adicionar à página, clicar e remover
@@ -674,13 +719,11 @@ export function EventsTable({
       baseParams.delete('page'); // Remover página atual
       baseParams.delete('limit'); // Remover limite atual
       
-      console.log('Iniciando exportação com parâmetros base:', baseParams.toString());
       
       // Primeiro, tentar obter todos os registros de uma vez
       const exportParams = new URLSearchParams(baseParams.toString());
       exportParams.set('export', 'true');
       
-      console.log('Tentando exportação direta com:', exportParams.toString());
       
       let allEvents: Event[] = [];
       let usedPagination = false;
@@ -695,14 +738,12 @@ export function EventsTable({
         const data = await response.json();
         allEvents = data.events || [];
         
-        console.log(`Exportação direta recebeu ${allEvents.length} de ${totalRegistros} registros`);
         
         // Se recebemos menos registros do que o esperado, vamos usar paginação
         if (allEvents.length < totalRegistros) {
           usedPagination = true;
           
           // Informar o usuário que estamos mudando para paginação
-          console.log('Mudando para abordagem paginada para obter todos os registros');
           
           // Limpar os eventos obtidos e usar paginação
           allEvents = [];
@@ -720,7 +761,6 @@ export function EventsTable({
             pageParams.set('page', String(page));
             pageParams.set('limit', String(pageSize));
             
-            console.log(`Buscando página ${page}/${totalPages} com tamanho ${pageSize}`);
             
             const pageResponse = await fetch(`/api/events?${pageParams.toString()}`);
             if (!pageResponse.ok) {
@@ -730,7 +770,6 @@ export function EventsTable({
             const pageData = await pageResponse.json();
             const pageEvents = pageData.events || [];
             
-            console.log(`Página ${page}: recebidos ${pageEvents.length} eventos`);
             
             // Adicionar os eventos desta página ao total
             allEvents = [...allEvents, ...pageEvents];
@@ -743,7 +782,6 @@ export function EventsTable({
             await new Promise(resolve => setTimeout(resolve, 100));
           }
           
-          console.log(`Total de eventos obtidos via paginação: ${allEvents.length}`);
         }
       } catch (error) {
         console.error('Erro na exportação direta, tentando paginação:', error);
@@ -764,7 +802,6 @@ export function EventsTable({
           pageParams.set('page', String(page));
           pageParams.set('limit', String(pageSize));
           
-          console.log(`Buscando página ${page}/${totalPages} com tamanho ${pageSize}`);
           
           const pageResponse = await fetch(`/api/events?${pageParams.toString()}`);
           if (!pageResponse.ok) {
@@ -774,7 +811,6 @@ export function EventsTable({
           const pageData = await pageResponse.json();
           const pageEvents = pageData.events || [];
           
-          console.log(`Página ${page}: recebidos ${pageEvents.length} eventos`);
           
           // Adicionar os eventos desta página ao total
           allEvents = [...allEvents, ...pageEvents];
@@ -787,7 +823,6 @@ export function EventsTable({
           await new Promise(resolve => setTimeout(resolve, 100));
         }
         
-        console.log(`Total de eventos obtidos via paginação: ${allEvents.length}`);
       }
       
       if (allEvents.length === 0) {
@@ -828,7 +863,6 @@ export function EventsTable({
       
       const totalBatches = Math.ceil(totalEvents / batchSize);
       
-      console.log(`Processando ${totalEvents} eventos em ${totalBatches} lotes de ${batchSize}`);
       
       // Calcular o progresso inicial com base no método usado
       // Se usamos paginação, já usamos 50% do progresso para buscar os dados
@@ -840,7 +874,6 @@ export function EventsTable({
         const end = Math.min(start + batchSize, totalEvents);
         const batch = allEvents.slice(start, end);
         
-        console.log(`Processando lote ${i+1}/${totalBatches}: ${start} a ${end}`);
         
         // Formatar os dados do lote para CSV
         const batchRows = batch.map((event: Event) => {
@@ -868,6 +901,11 @@ export function EventsTable({
               value = event[eventKey] !== undefined ? String(event[eventKey]) : '-';
             }
             
+            // Formatação especial para campos de data (event_time)
+            if (key === 'event_time' && value && value !== '-') {
+              value = formatDateToBRT(value);
+            }
+            
             // Escapar vírgulas e aspas no valor para CSV
             return `"${value.replace(/"/g, '""')}"`;
           }).join(',');
@@ -886,7 +924,6 @@ export function EventsTable({
         await new Promise(resolve => setTimeout(resolve, 0));
       }
       
-      console.log(`Exportação concluída: ${csvRows.length - 1} linhas geradas`);
       
       // Criar conteúdo CSV
       const csvContent = csvRows.join('\n');
@@ -897,9 +934,11 @@ export function EventsTable({
       
       // Criar link para download
       const link = document.createElement('a');
-      const date = new Date().toISOString().split('T')[0];
+      // Formatar data no horário de Brasília para o nome do arquivo
+      const date = new Date()
+      const brazilDate = date.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }).replace(/\//g, '-')
       link.setAttribute('href', url);
-      link.setAttribute('download', `todos_eventos_exportados_${date}.csv`);
+      link.setAttribute('download', `todos_eventos_exportados_${brazilDate}.csv`);
       link.style.visibility = 'hidden';
       
       // Adicionar à página, clicar e remover
@@ -921,7 +960,7 @@ export function EventsTable({
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center p-4 min-h-[200px] bg-white shadow-md sm:rounded-lg">
+      <div className="flex items-center justify-center w-full h-full">
         <div className="text-gray-500">Carregando eventos...</div>
       </div>
     )

@@ -116,6 +116,7 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
   
   // Flag para evitar loops infinitos de atualização
   const [isUpdatingFromUrl, setIsUpdatingFromUrl] = useState(false);
+  const [isUpdatingDirectly, setIsUpdatingDirectly] = useState(false);
   
   // Inicializar os estados a partir da URL na primeira montagem
   useEffect(() => {
@@ -172,6 +173,7 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
   useEffect(() => {
     setIsUpdatingFromUrl(true);
     
+    
     // Atualizar professionIds a partir da URL
     const urlProfessionIds = searchParams.get('profession_id');
     const newProfessionIds = urlProfessionIds ? urlProfessionIds.split(',') : [];
@@ -217,13 +219,23 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
     // Atualizar advancedFilters a partir da URL
     try {
       const advancedFiltersParam = searchParams.get('advanced_filters');
-      console.log('Parâmetro de filtros avançados na URL:', advancedFiltersParam);
+      
+      // Verificar se os filtros avançados desapareceram inesperadamente
+      const hasCurrentFilters = advancedFilters.some(f => f.value.trim() !== '');
+      if (hasCurrentFilters && !advancedFiltersParam) {
+        console.warn('ALERTA: Filtros avançados desapareceram da URL. Restaurando...');
+        // Agendar uma atualização da URL para restaurar os filtros
+        setTimeout(() => {
+          if (!isUpdatingDirectly) {
+            updateUrl();
+          }
+        }, 300);
+      }
       
       let newAdvancedFilters;
       
       if (advancedFiltersParam) {
         const parsedFilters = JSON.parse(advancedFiltersParam);
-        console.log('Filtros avançados parseados:', parsedFilters);
         // Remover quaisquer filtros baseados em event_time
         const validFilters = parsedFilters.filter((f: AdvancedFilter) => f.property !== 'event_time');
         
@@ -237,7 +249,6 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
       
       // Só atualiza se os filtros forem realmente diferentes
       if (JSON.stringify(newAdvancedFilters) !== JSON.stringify(advancedFilters)) {
-        console.log('Atualizando filtros avançados para:', newAdvancedFilters);
         setAdvancedFilters(newAdvancedFilters);
       }
     } catch (e) {
@@ -277,6 +288,32 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
       updateUrl();
     }
   }, [professionIds, funnelIds, dateRange, advancedFilters, filterCondition, isUpdatingFromUrl]);
+  
+  // useEffect para atualizar a URL quando os filtros mudam
+  useEffect(() => {
+    if (!isUpdatingFromUrl && !isUpdatingDirectly) {
+      // Configurar um timeout para atualizar a URL após um breve delay para evitar múltiplas atualizações
+      const timeoutId = setTimeout(() => {
+        updateUrl();
+      }, 100);
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [
+    professionIds,
+    funnelIds,
+    dateRange,
+    advancedFilters,
+    filterCondition,
+    isUpdatingFromUrl,
+    isUpdatingDirectly
+  ]);
+  
+  // Adicionar log para depuração dos filtros avançados
+  useEffect(() => {
+    if (advancedFilters.some(f => f.value.trim() !== '')) {
+    }
+  }, [advancedFilters, filterCondition]);
   
   const updateUrl = () => {
     // Se estamos atualizando a partir da URL, não precisamos atualizar de volta
@@ -334,7 +371,8 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
     // Adicionar filtros avançados à URL
     const filtersWithValues = advancedFilters.filter(f => f.value.trim() !== '');
     if (filtersWithValues.length > 0) {
-      params.set('advanced_filters', JSON.stringify(filtersWithValues));
+      const filtersJson = JSON.stringify(filtersWithValues);
+      params.set('advanced_filters', filtersJson);
       params.set('filter_condition', filterCondition);
     } else {
       params.delete('advanced_filters');
@@ -425,15 +463,140 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
       (f) => f.property !== 'event_time'
     );
     
-    // Se não sobrarem filtros válidos, adicionamos um filtro padrão vazio
-    const filtersToSave = validFilters.length > 0 
-      ? validFilters 
+    // Filtrar apenas filtros que tenham valores
+    const filtersWithValues = validFilters.filter(f => f.value.trim() !== '');
+    
+    // Se não sobrarem filtros válidos com valores, adicionamos um filtro padrão vazio
+    const filtersToSave = filtersWithValues.length > 0 
+      ? filtersWithValues 
       : [{ id: '1', property: 'user.fullname', operator: 'equals', value: '' }];
-      
+    
+    
+    // Atualizar o estado com os novos filtros
     setAdvancedFilters(filtersToSave);
     setFilterCondition(pendingFilterCondition);
     setAdvancedFilterOpen(false);
-    // updateUrl será chamado pelo useEffect quando advancedFilters ou filterCondition mudarem
+    
+    // Definir a flag para evitar que o useEffect atualize a URL
+    setIsUpdatingDirectly(true);
+    
+    try {
+      // Chamar updateUrl diretamente em vez de depender do useEffect
+      // Isso garante que a atualização aconteça imediatamente após salvar os filtros
+      const params = new URLSearchParams(searchParams.toString());
+      
+      // Verificação: logging dos parâmetros iniciais
+      
+      // Preservar o parâmetro de página atual
+      const currentPage = params.get('page') || '1';
+      
+      // Manter outros parâmetros existentes
+      if (professionIds.length > 0) {
+        params.set('profession_id', professionIds.join(','));
+      } else {
+        params.delete('profession_id');
+      }
+      
+      if (funnelIds.length > 0) {
+        params.set('funnel_id', funnelIds.join(','));
+      } else {
+        params.delete('funnel_id');
+      }
+      
+      if (dateRange?.from) {
+        params.set('from', dateRange.from.toISOString());
+        
+        if (dateRange.to) {
+          params.set('to', dateRange.to.toISOString());
+        } else {
+          params.delete('to');
+        }
+        
+        if (dateRange.fromTime) {
+          params.set('time_from', dateRange.fromTime);
+        } else {
+          params.delete('time_from');
+        }
+        
+        if (dateRange.toTime) {
+          params.set('time_to', dateRange.toTime);
+        } else {
+          params.delete('time_to');
+        }
+      } else {
+        params.delete('from');
+        params.delete('to');
+        params.delete('time_from');
+        params.delete('time_to');
+      }
+      
+      // Adicionar filtros avançados à URL
+      if (filtersWithValues.length > 0) {
+        const filtersJson = JSON.stringify(filtersWithValues);
+        params.set('advanced_filters', filtersJson);
+        params.set('filter_condition', pendingFilterCondition);
+      } else {
+        params.delete('advanced_filters');
+        params.delete('filter_condition');
+      }
+      
+      // Garantir que o parâmetro de página seja mantido
+      params.set('page', currentPage);
+      
+      // Preservar parâmetros de ordenação e limite
+      const sortBy = searchParams.get('sortBy');
+      const sortDirection = searchParams.get('sortDirection');
+      const limit = searchParams.get('limit');
+      
+      if (sortBy) params.set('sortBy', sortBy);
+      if (sortDirection) params.set('sortDirection', sortDirection);
+      if (limit) params.set('limit', limit);
+      
+      // Verificação final: garantir que os filtros avançados estão na URL
+      const finalAdvancedFilters = params.get('advanced_filters');
+      if (filtersWithValues.length > 0 && !finalAdvancedFilters) {
+        console.warn('ALERTA: Filtros avançados não foram adicionados corretamente. Tentando novamente...');
+        params.set('advanced_filters', JSON.stringify(filtersWithValues));
+        params.set('filter_condition', pendingFilterCondition);
+      }
+      
+      const newUrl = `/events?${params.toString()}`;
+      
+      // Atualizar a URL primeiro
+      router.push(newUrl, { scroll: false });
+      
+      // Permitir que a URL seja atualizada antes de disparar o refetch
+      setTimeout(() => {
+        if (onFilterChange) {
+          onFilterChange({
+            professionId: professionIds.length > 0 ? professionIds.join(',') : null,
+            funnelId: funnelIds.length > 0 ? funnelIds.join(',') : null,
+            dateFrom: dateRange?.from ? dateRange.from.toISOString() : null,
+            dateTo: dateRange?.to ? dateRange.to.toISOString() : null,
+            timeFrom: dateRange?.fromTime || null,
+            timeTo: dateRange?.toTime || null,
+            advancedFilters: filtersWithValues.length > 0 ? filtersWithValues : undefined,
+            filterCondition: filtersWithValues.length > 0 ? pendingFilterCondition : undefined
+          });
+        }
+        
+        // Disparar o evento para forçar a recarga dos dados
+        window.dispatchEvent(new CustomEvent('refetch-events'));
+        
+        // Verificar se os filtros estão na URL após a atualização
+        setTimeout(() => {
+          const currentParams = new URLSearchParams(window.location.search);
+          const currentAdvancedFilters = currentParams.get('advanced_filters');
+        }, 500);
+      }, 100);
+    } catch (error) {
+      console.error('Erro ao salvar filtros avançados:', error);
+    } finally {
+      // Resetar a flag após a atualização direta
+      setTimeout(() => {
+        setIsUpdatingDirectly(false);
+      }, 500);
+    }
   };
 
   const handleClearFilters = () => {
@@ -489,17 +652,8 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
 
   const getFilterButtonText = () => {
     if (professionIds.length === 0 && funnelIds.length === 0) {
-      return "Filtrar por profissões/funis"
-    }
-
-    const parts = []
-    if (professionIds.length > 0) {
-      parts.push(`${professionIds.length} ${professionIds.length === 1 ? 'profissional' : 'profissionais'}`)
-    }
-    if (funnelIds.length > 0) {
-      parts.push(`${funnelIds.length} ${funnelIds.length === 1 ? 'funil' : 'funis'}`)
-    }
-    return parts.join(', ') || "Filtrar por profissões/funis"
+      return "Filtros avançados"
+    } 
   }
 
   const renderFilterContent = () => {
@@ -510,67 +664,18 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
             <Button
               variant="ghost"
               className="w-full justify-start text-sm h-10"
-              onClick={() => {
-                setActiveFilter("professions")
-                setSearchQuery("")
-              }}
-            >
-              <Filter className="h-4 w-4 mr-2" />
-              Filtrar por Profissões
-              {professionIds.length > 0 && (
-                <Badge variant="secondary" className="ml-auto">
-                  {professionIds.length}
-                </Badge>
-              )}
-            </Button>
-            <Button
-              variant="ghost"
-              className="w-full justify-start text-sm h-10"
-              onClick={() => {
-                setActiveFilter("funnels")
-                setSearchQuery("")
-              }}
-            >
-              <Filter className="h-4 w-4 mr-2" />
-              Filtrar por Funis
-              {funnelIds.length > 0 && (
-                <Badge variant="secondary" className="ml-auto">
-                  {funnelIds.length}
-                </Badge>
-              )}
-            </Button>
-            
-            <Button
-              variant="ghost"
-              className="w-full justify-start text-sm h-10"
-              onClick={() => {
-                setPendingAdvancedFilters([...advancedFilters]);
-                setPendingFilterCondition(filterCondition);
-                setAdvancedFilterOpen(true);
-              }}
+              onClick={handleClearFilters}
             >
               <SlidersHorizontal className="h-4 w-4 mr-2" />
-              Filtros Avançados
-              {advancedFilters.some(f => f.value.trim() !== '') && (
-                <Badge variant="secondary" className="ml-auto">
-                  {advancedFilters.filter(f => f.value.trim() !== '').length}
-                </Badge>
-              )}
+              Limpar Filtros
             </Button>
           </div>
           
           <hr className="my-2" />
           
-          {/* Buttons */}
+          {/* Espaço reservado para futuros botões se necessário */}
           <div className="flex justify-between pt-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-xs"
-              onClick={handleClearFilters}
-            >
-              Limpar
-            </Button>
+            {/* Botões de ação adicionais podem ser adicionados aqui no futuro */}
           </div>
         </div>
       )
@@ -816,30 +921,28 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
 
   return (
     <div className="flex items-center space-x-2">
-      <Popover>
-        <PopoverTrigger asChild>
-          <Button
-            variant="outline"
-            size="sm"
-            className={cn(
-              "h-9 flex whitespace-nowrap",
-              (professionIds.length > 0 || funnelIds.length > 0 || advancedFilters.some(f => f.value.trim() !== '')) && 
-              "bg-blue-50 border-blue-300 hover:bg-blue-100 hover:border-blue-400"
-            )}
-          >
-            <Filter className="h-3.5 w-3.5 mr-2" />
-            {getFilterButtonText()}
-            {advancedFilters.some(f => f.value.trim() !== '') && (
-              <Badge variant="secondary" className="ml-2">
-                {advancedFilters.filter(f => f.value.trim() !== '').length}
-              </Badge>
-            )}
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="p-0 w-[260px]" align="start" sideOffset={5}>
-          {renderFilterContent()}
-        </PopoverContent>
-      </Popover>
+      <Button
+        variant="outline"
+        size="sm"
+        className={cn(
+          "h-9 flex whitespace-nowrap",
+          (professionIds.length > 0 || funnelIds.length > 0 || advancedFilters.some(f => f.value.trim() !== '')) && 
+          "bg-blue-50 border-blue-300 hover:bg-blue-100 hover:border-blue-400"
+        )}
+        onClick={() => {
+          setPendingAdvancedFilters([...advancedFilters]);
+          setPendingFilterCondition(filterCondition);
+          setAdvancedFilterOpen(true);
+        }}
+      >
+        <Filter className="h-3.5 w-3.5 mr-2" />
+        Filtros avançados
+        {advancedFilters.some(f => f.value.trim() !== '') && (
+          <Badge variant="secondary" className="ml-2">
+            {advancedFilters.filter(f => f.value.trim() !== '').length}
+          </Badge>
+        )}
+      </Button>
 
       <Popover>
         <PopoverTrigger asChild>
@@ -878,7 +981,7 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
         </PopoverContent>
       </Popover>
 
-      {/* Advanced Filters Dialog */}
+      {/* Modal de Filtros Avançados */}
       <Dialog open={advancedFilterOpen} onOpenChange={setAdvancedFilterOpen}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
@@ -1022,20 +1125,23 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
             </div>
           </div>
 
-          <DialogFooter>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setAdvancedFilterOpen(false)}
-            >
-              Cancelar
-            </Button>
-            <Button
-              size="sm"
-              onClick={saveAdvancedFilters}
-            >
-              Aplicar Filtros
-            </Button>
+          <DialogFooter className="flex justify-between">
+            <div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setAdvancedFilterOpen(false)}
+                className="mr-2"
+              >
+                Cancelar
+              </Button>
+              <Button
+                size="sm"
+                onClick={saveAdvancedFilters}
+              >
+                Aplicar Filtros
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

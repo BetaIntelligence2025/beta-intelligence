@@ -12,7 +12,6 @@ export async function GET(request: NextRequest) {
     const params = buildPaginationParams(page, limit, sortBy, sortDirection)
     const apiUrl = buildApiUrl(API_ENDPOINTS.LEAD, params)
     
-    console.log(`Fazendo requisição para leads: ${apiUrl}`)
     const response = await fetch(apiUrl, {
       headers: {
         'Accept': 'application/json',
@@ -25,7 +24,6 @@ export async function GET(request: NextRequest) {
     }
     
     const data = await response.json()
-    console.log('Dados recebidos da API de leads:', data)
     
     // Transformar o formato de dados para o formato esperado pelo componente
     // Usando o campo "leads" da resposta da API
@@ -39,7 +37,6 @@ export async function GET(request: NextRequest) {
       sortDirection: data.sortDirection || sortDirection
     }
     
-    console.log('Dados transformados para leads:', transformedData);
     
     return NextResponse.json(transformedData)
   } catch (error) {

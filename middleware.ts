@@ -6,7 +6,6 @@ export async function middleware(request: NextRequest) {
   const requestUrl = new URL(request.url)
   const path = requestUrl.pathname
   
-  console.log("[MIDDLEWARE] Processando requisição:", request.method, path)
   
   // Criar cliente do Supabase
   const { supabase, response: supabaseResponse } = createClient(request)
@@ -28,7 +27,6 @@ export async function middleware(request: NextRequest) {
     // Adicionar a URL de retorno como parâmetro para redirecionar após o login
     redirectUrl.searchParams.set('redirectTo', requestUrl.pathname)
     
-    console.log("[MIDDLEWARE] Usuário não autenticado, redirecionando para:", redirectUrl.href)
     return NextResponse.redirect(redirectUrl.href)
   }
   
@@ -44,7 +42,6 @@ export async function middleware(request: NextRequest) {
     try {
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
       if (supabaseUrl) {
-        console.log("[MIDDLEWARE] Verificando conectividade com Supabase:", supabaseUrl)
         
         // Tentativa de ping para verificar se o domínio é resolvido
         try {
@@ -57,7 +54,6 @@ export async function middleware(request: NextRequest) {
           })
           
           clearTimeout(timeoutId)
-          console.log("[MIDDLEWARE] Ping ao Supabase bem-sucedido:", pingResponse.status)
         } catch (error) {
           console.error("[MIDDLEWARE] Falha ao conectar com Supabase:", error)
           
@@ -68,12 +64,10 @@ export async function middleware(request: NextRequest) {
              error.message.includes('getaddrinfo') ||
              error.message.includes('domain'))
           ) {
-            console.log("[MIDDLEWARE] Detectado problema de DNS com o Supabase")
             
             // Se o cliente estiver solicitando a página de login, incluímos uma mensagem
             if (request.method === 'GET' && (path === '/sign-in' || path === '/sign-up')) {
               const url = new URL('/sistema-indisponivel', requestUrl.origin)
-              console.log("[MIDDLEWARE] Redirecionando para página de sistema indisponível")
               return NextResponse.redirect(url)
             }
             

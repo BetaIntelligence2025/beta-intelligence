@@ -11,6 +11,7 @@ const fetchEvents = async ({ queryKey }: any) => {
   const [_, page, limit, sortConfig, searchParamsString] = queryKey;
   const searchParams = new URLSearchParams(searchParamsString);
   
+  
   // Criar uma nova instância de URLSearchParams para a requisição
   const params = new URLSearchParams();
   
@@ -26,15 +27,26 @@ const fetchEvents = async ({ queryKey }: any) => {
     }
   }
   
-  // Adicionar todos os parâmetros da URL atual
-  for (const [key, value] of Array.from(searchParams.entries())) {
+  // Criar uma cópia explícita dos parâmetros para garantir que não são perdidos
+  const paramsEntries = Array.from(searchParams.entries());
+  
+  // Adicionar todos os parâmetros da URL atual, com atenção especial aos filtros avançados
+  for (const [key, value] of paramsEntries) {
     if (key !== 'page' && key !== 'limit' && key !== 'sortBy' && key !== 'sortDirection') {
+      // Garantir que filtros avançados são preservados
+      if (key === 'advanced_filters') {
+      }
       params.set(key, value);
     }
   }
   
+  // Verificação adicional para garantir que os filtros avançados foram incluídos
+  const finalAdvancedFilters = params.get('advanced_filters');
+  
+  const paramString = params.toString();
+  
   // Fazer a requisição com todos os parâmetros
-  const response = await fetch(`/api/events?${params.toString()}`);
+  const response = await fetch(`/api/events?${paramString}`);
   if (!response.ok) {
     throw new Error('Falha ao buscar eventos');
   }
@@ -45,6 +57,13 @@ function EventsContent() {
   const supabase = createClient();
   const router = useRouter();
   const searchParams = useSearchParams();
+  
+  // Usar uma ref para manter o último searchParams processado
+  const lastSearchParamsRef = useRef<string>(searchParams.toString());
+  
+  // Manter um estado para verificar se houve mudança nos parâmetros
+  const [hasSearchParamsChanged, setHasSearchParamsChanged] = useState(false);
+  
   const [currentPage, setCurrentPage] = useState(
     Number(searchParams.get('page')) || 1
   );
@@ -105,26 +124,62 @@ function EventsContent() {
     
     // Só atualiza se for diferente para evitar loops
     if (pageNumber !== currentPage) {
-      console.log('Sincronizando currentPage com URL:', pageNumber);
       setCurrentPage(pageNumber);
     }
   }, [searchParams, currentPage]);
+
+  // Detectar mudanças nos parâmetros de busca
+  useEffect(() => {
+    const currentParams = searchParams.toString();
+    if (currentParams !== lastSearchParamsRef.current) {
+      
+      // Verificar se os filtros avançados mudaram
+      const prevParams = new URLSearchParams(lastSearchParamsRef.current);
+      const currentParamsObj = new URLSearchParams(currentParams);
+      
+      const prevAdvancedFilters = prevParams.get('advanced_filters');
+      const currentAdvancedFilters = currentParamsObj.get('advanced_filters');
+      
+      
+      // Atualizar a referência
+      lastSearchParamsRef.current = currentParams;
+      setHasSearchParamsChanged(true);
+    }
+  }, [searchParams]);
+
+  // Após detectar uma mudança, resetar a flag depois de um tempo
+  useEffect(() => {
+    if (hasSearchParamsChanged) {
+      const timer = setTimeout(() => {
+        setHasSearchParamsChanged(false);
+      }, 500);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [hasSearchParamsChanged]);
 
   if (!supabase.auth.getUser()) {
     return redirect("/sign-in");
   }
 
   const handlePageChange = useCallback((newPage: number) => {
-    console.log('Page - handlePageChange chamado com página:', newPage);
     
-    // Enviar um evento customizado para forçar refetch
-    const event = new CustomEvent('refetch-events');
-    window.dispatchEvent(event);
-    
-    // Atualizar a URL
+    // Obter os parâmetros atuais incluindo filtros avançados
     const params = new URLSearchParams(searchParams.toString());
+    const advancedFilters = params.get('advanced_filters');
+    
+    // Atualizar apenas o parâmetro de página, mantendo os demais
     params.set('page', newPage.toString());
-    router.push(`/events?${params.toString()}`, { scroll: false });
+    
+    // Atualizar a URL preservando todos os outros parâmetros
+    const newUrl = `/events?${params.toString()}`;
+    router.push(newUrl, { scroll: false });
+    
+    // Enviar um evento customizado para forçar refetch após a mudança de URL
+    setTimeout(() => {
+      const event = new CustomEvent('refetch-events');
+      window.dispatchEvent(event);
+    }, 100);
   }, [router, searchParams]);
 
   const handlePerPageChange = useCallback((newLimit: number) => {
@@ -158,18 +213,35 @@ function EventsContent() {
   } = useQuery({
     queryKey: ["events", currentPage, limit, sortConfig, searchParams.toString()],
     queryFn: async () => {
-      console.log('Buscando eventos para página:', currentPage)
-      return fetchEvents({ queryKey: ["events", currentPage, limit, sortConfig, searchParams.toString()] });
+      
+      // Verificar filtros avançados antes da busca
+      const advancedFilters = new URLSearchParams(searchParams.toString()).get('advanced_filters');
+      
+      return fetchEvents({ 
+        queryKey: ["events", currentPage, limit, sortConfig, searchParams.toString()]
+      });
     },
-    staleTime: 5 * 60 * 1000, // 5 minutos
+    staleTime: 1 * 60 * 1000, // 1 minuto (reduzido para ser mais responsivo)
     gcTime: 10 * 60 * 1000, // 10 minutos
     refetchOnWindowFocus: false,
+    // Desativar refetch automático na montagem para evitar perda de filtros
+    refetchOnMount: false,
+    // Configurar retry para garantir que temos tempo de processar os parâmetros
+    retry: 1,
+    retryDelay: 500,
+    // Usar placeholderData em vez de keepPreviousData (que está obsoleto)
+    placeholderData: (previousData) => previousData,
   });
   
   // Adicionar listener para o evento customizado
   useEffect(() => {
     const refetchHandler = () => {
-      console.log('Evento refetch-events recebido, recarregando dados...');
+      
+      // Verificar se temos filtros avançados antes de fazer o refetch
+      const advancedFilters = searchParams.get('advanced_filters');
+      
+      // Forçar um refetch imediato, mas preservando o estado atual
+      // Não vamos criar novos parâmetros nem atualizar a URL, apenas recarregar dados
       refetch();
     };
     
@@ -178,7 +250,7 @@ function EventsContent() {
     return () => {
       window.removeEventListener('refetch-events', refetchHandler);
     };
-  }, [refetch]);
+  }, [refetch, searchParams]);
 
   return (
     <div className="flex flex-col h-full w-full" ref={containerRef}>

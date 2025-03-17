@@ -5,24 +5,47 @@ import { API_ENDPOINTS } from '@/app/config/api'
 // Usar a configuração centralizada de API
 const EVENTS_ENDPOINT = API_ENDPOINTS.EVENTS
 
-console.log(`API configurada para usar: ${EVENTS_ENDPOINT}`)
 
 export async function GET(request: NextRequest) {
   try {
-    console.log('Recebendo requisição para /api/events')
     const { searchParams } = new URL(request.url)
-    console.log('Query params:', Object.fromEntries(searchParams.entries()))
+    
+    // Verificar especificamente se os filtros avançados existem
+    const advancedFilters = searchParams.get('advanced_filters')
+    const filterCondition = searchParams.get('filter_condition')
     
     // Criar uma nova instância de URLSearchParams para a requisição ao backend
     const params = new URLSearchParams()
     
+    // Fazer uma cópia dos parâmetros originais para garantir que não são perdidos
+    const originalParams = Array.from(searchParams.entries());
+    
+    // Verificação para garantir que advanced_filters está presente na cópia
+    if (advancedFilters) {
+      let foundInOriginal = false;
+      for (const [key, value] of originalParams) {
+        if (key === 'advanced_filters') {
+          foundInOriginal = true;
+          break;
+        }
+      }
+      
+      if (!foundInOriginal) {
+        originalParams.push(['advanced_filters', advancedFilters]);
+      }
+      
+      if (filterCondition && !originalParams.some(([key]) => key === 'filter_condition')) {
+        originalParams.push(['filter_condition', filterCondition]);
+      }
+    }
+    
     // Transferir todos os parâmetros da requisição para os parâmetros da chamada ao backend
-    Array.from(searchParams.entries()).forEach(([key, value]) => {
+    for (const [key, value] of originalParams) {
       // Para o caso de advanced_filters, garantir que é uma string JSON válida
       if (key === 'advanced_filters') {
         try {
           // Testar se é JSON válido
-          JSON.parse(value)
+          const parsedFilters = JSON.parse(value)
           params.append(key, value)
         } catch (err) {
           console.error('Erro ao processar advanced_filters:', err)
@@ -31,14 +54,22 @@ export async function GET(request: NextRequest) {
       } else {
         params.append(key, value)
       }
-    })
+    }
     
-    console.log('Enviando requisição para o backend:', `${EVENTS_ENDPOINT}?${params.toString()}`)
+    // Verificação final para garantir que advanced_filters foi adicionado
+    if (advancedFilters && !params.has('advanced_filters')) {
+      params.set('advanced_filters', advancedFilters);
+      
+      if (filterCondition) {
+        params.set('filter_condition', filterCondition);
+      }
+    }
+    
+    const paramString = params.toString()
     
     // Fazer a requisição para o backend
-    const response = await axios.get(`${EVENTS_ENDPOINT}?${params.toString()}`)
+    const response = await axios.get(`${EVENTS_ENDPOINT}?${paramString}`)
     
-    console.log('Resposta do backend recebida com sucesso')
     
     // Retornar os dados recebidos do backend
     return NextResponse.json(response.data)

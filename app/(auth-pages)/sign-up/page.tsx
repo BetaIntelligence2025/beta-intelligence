@@ -16,7 +16,7 @@ export default function Signup() {
   const [message, setMessage] = useState<Message | null>(null);
   const [email, setEmail] = useState("");
   const [isValidEmail, setIsValidEmail] = useState(true);
-  const redirectTo = searchParams.get('redirectTo') || '/dashboard';
+  const redirectTo = searchParams.get('redirectTo') || '/events';
 
   useEffect(() => {
     // Processar mensagens nos parâmetros de busca
@@ -70,14 +70,14 @@ export default function Signup() {
           <CardHeader className="flex flex-col items-center space-y-2 pb-2">
             <h1 className="text-2xl font-bold text-center">Cadastre-se</h1>
             <p className="text-muted-foreground text-sm text-center">
-              Crie sua conta para acessar o Beta Intelligence
+              Acesso exclusivo para colaboradores da Beta Intelligence
             </p>
           </CardHeader>
           <CardContent>
             <form className="space-y-4" action={signUpAction} onSubmit={handleSubmit}>
               <div className="space-y-2">
                 <Label htmlFor="email" className="text-sm font-medium">
-                  Email
+                  Email Corporativo
                 </Label>
                 <Input 
                   name="email" 
@@ -108,16 +108,23 @@ export default function Signup() {
                   minLength={6}
                   required
                 />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Mínimo de 6 caracteres
+                </p>
               </div>
               
               <input type="hidden" name="redirectTo" value={redirectTo} />
+              
+              <div className="bg-blue-50 p-3 rounded-md border border-blue-100 text-xs text-blue-700 mb-2">
+                <p>Após o cadastro, você será direcionado automaticamente para o sistema.</p>
+              </div>
               
               <SubmitButton 
                 pendingText="Cadastrando..." 
                 className="w-full bg-primary hover:bg-primary/90 transition-all"
                 disabled={!isValidEmail}
               >
-                Cadastrar
+                Cadastrar e Acessar
               </SubmitButton>
               
               {message && (

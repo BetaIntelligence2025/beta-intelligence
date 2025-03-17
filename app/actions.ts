@@ -8,12 +8,10 @@ import { redirect } from "next/navigation";
 export const signUpAction = async (formData: FormData) => {
   const email = formData.get("email")?.toString();
   const password = formData.get("password")?.toString();
+  const redirectTo = formData.get("redirectTo")?.toString() || "/events";
   const supabase = await createClient();
-  const origin = (await headers()).get("origin");
-
 
   if (!email || !password) {
-
     return encodedRedirect(
       "error",
       "/sign-up",
@@ -30,21 +28,66 @@ export const signUpAction = async (formData: FormData) => {
     );
   }
 
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      emailRedirectTo: `${origin}/auth/callback`,
-    },
-  });
+  try {
+    // Registrar usuário sem confirmação de email
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: `${new URL(redirectTo, process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").href}`,
+        data: {
+          email_confirmed: true
+        }
+      },
+    });
 
-  if (error) {
-    return encodedRedirect("error", "/sign-up", error.message);
-  } else {
+    if (error) {
+      console.error("Erro ao registrar usuário:", error.message);
+      return encodedRedirect("error", "/sign-up", error.message);
+    }
+
+    // Verificar se o usuário foi criado com sucesso
+    if (!data?.user?.id) {
+      console.error("Usuário não foi criado corretamente");
+      return encodedRedirect("error", "/sign-up", "Erro ao criar usuário. Tente novamente mais tarde.");
+    }
+
+    // Se a configuração 'confirmação de email' estiver ativada no Supabase,
+    // informamos ao usuário que ele precisa confirmar o email
+    if (data?.user?.identities && data.user.identities.length === 0) {
+      return encodedRedirect(
+        "success", 
+        "/sign-in", 
+        "Conta criada com sucesso! Verifique seu email para ativar sua conta ou entre em contato com a administração."
+      );
+    }
+    
+    // Tentar fazer login imediatamente (funciona se a confirmação estiver desativada no Supabase)
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+    
+    // Se conseguiu fazer login, redireciona para o dashboard
+    if (!signInError) {
+      console.log("Login automático realizado com sucesso");
+      return redirect(redirectTo);
+    }
+    
+    // Se não conseguir fazer login automático, redireciona para página de login
+    console.warn("Não foi possível fazer login automático:", signInError.message);
     return encodedRedirect(
-      "success",
-      "/sign-up",
-      "Thanks for signing up! Please check your email for a verification link.",
+      "success", 
+      "/sign-in", 
+      "Conta criada com sucesso! Faça login para continuar."
+    );
+    
+  } catch (error) {
+    console.error("Exceção não tratada ao registrar usuário:", error);
+    return encodedRedirect(
+      "error", 
+      "/sign-up", 
+      "Ocorreu um erro inesperado. Por favor, tente novamente mais tarde."
     );
   }
 };

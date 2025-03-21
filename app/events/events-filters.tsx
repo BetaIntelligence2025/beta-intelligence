@@ -118,6 +118,14 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
   const [isUpdatingFromUrl, setIsUpdatingFromUrl] = useState(false);
   const [isUpdatingDirectly, setIsUpdatingDirectly] = useState(false);
   
+  // Helper function to get current filters from URL
+  const getFiltersFromUrl = () => {
+    return {
+      professionId: professionIds.length > 0 ? professionIds.join(',') : null,
+      funnelId: funnelIds.length > 0 ? funnelIds.join(',') : null
+    };
+  };
+  
   // Inicializar os estados a partir da URL na primeira montagem
   useEffect(() => {
     // Se temos initialFilters, eles têm prioridade
@@ -839,7 +847,7 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
                         onValueChange={(value) => handleAdvancedFilterChange(index, 'value', value)}
                       >
                         <SelectTrigger>
-                          <SelectValue placeholder="Selecione um tipo" />
+                          <SelectValue placeholder="Selecione um Evento" />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="LEAD">LEAD</SelectItem>
@@ -847,14 +855,30 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
                           <SelectItem value="ADD_PAYMENT_INFO">ADD_PAYMENT_INFO</SelectItem>
                           <SelectItem value="PURCHASE">PURCHASE</SelectItem>
                           <SelectItem value="PAGEVIEW">PAGEVIEW</SelectItem>
+                          <SelectItem value="PESQUISA_LEAD">PESQUISA_LEAD</SelectItem>
                         </SelectContent>
                       </Select>
                     ) : (
-                      <Input
-                        value={filter.value}
-                        onChange={(e) => handleAdvancedFilterChange(index, 'value', e.target.value)}
-                        placeholder="Valor"
-                      />
+                      <div className="relative">
+                        <Input
+                          value={filter.value}
+                          onChange={(e) => handleAdvancedFilterChange(index, 'value', e.target.value)}
+                          placeholder="Valor"
+                          className={filter.value ? "pr-8" : ""}
+                        />
+                        {filter.value && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="absolute right-0 top-0 h-10 w-8 rounded-l-none p-0"
+                            onClick={() => handleAdvancedFilterChange(index, 'value', '')}
+                          >
+                            <X className="h-3 w-3" />
+                            <span className="sr-only">Limpar</span>
+                          </Button>
+                        )}
+                      </div>
                     )}
                   </div>
                   
@@ -944,46 +968,107 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
         )}
       </Button>
 
-      <Popover>
-        <PopoverTrigger asChild>
+      <div className="flex items-center space-x-1">
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              className={cn(
+                "h-9",
+                dateRange && "bg-blue-50 border-blue-300 hover:bg-blue-100 hover:border-blue-400"
+              )}
+            >
+              <Calendar className="h-3.5 w-3.5 mr-2" />
+              {dateRange?.from ? (
+                <span className="text-sm">
+                  {dateRange.to ? (
+                    <>
+                      {format(dateRange.from, "dd/MM/yyyy", { locale: ptBR })}
+                      {dateRange.fromTime && ` ${dateRange.fromTime}`} -{" "}
+                      {format(dateRange.to, "dd/MM/yyyy", { locale: ptBR })}
+                      {dateRange.toTime && ` ${dateRange.toTime}`}
+                    </>
+                  ) : (
+                    <>
+                      {format(dateRange.from, "dd/MM/yyyy", { locale: ptBR })}
+                      {dateRange.fromTime && ` ${dateRange.fromTime}`}
+                    </>
+                  )}
+                </span>
+              ) : (
+                <span className="text-sm">Selecione um período</span>
+              )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="p-0 w-[300px]" align="start" sideOffset={5}>
+            <DateFilter onChange={handleDateChange} initialDate={dateRange} />
+          </PopoverContent>
+        </Popover>
+
+        {dateRange && (
           <Button
-            variant="outline"
-            size="sm"
-            className={cn(
-              "h-9",
-              dateRange && "bg-blue-50 border-blue-300 hover:bg-blue-100 hover:border-blue-400"
-            )}
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9"
+            onClick={() => {
+              setDateRange(undefined);
+              const params = new URLSearchParams(searchParams.toString());
+              params.delete('from');
+              params.delete('to');
+              params.delete('time_from');
+              params.delete('time_to');
+              
+              // Preservar outros parâmetros
+              const currentPage = params.get('page') || '1';
+              const sortBy = params.get('sortBy');
+              const sortDirection = params.get('sortDirection');
+              const limit = params.get('limit');
+              
+              // Garantir que o parâmetro de página seja mantido
+              params.set('page', currentPage);
+              if (sortBy) params.set('sortBy', sortBy);
+              if (sortDirection) params.set('sortDirection', sortDirection);
+              if (limit) params.set('limit', limit);
+              
+              router.push(`/events?${params.toString()}`, { scroll: false });
+              
+              // Disparar refetch
+              if (onFilterChange) {
+                onFilterChange({
+                  ...getFiltersFromUrl(),
+                  dateFrom: null,
+                  dateTo: null,
+                  timeFrom: null,
+                  timeTo: null
+                });
+              }
+              window.dispatchEvent(new CustomEvent('refetch-events'));
+            }}
+            title="Limpar filtro de período"
           >
-            <Calendar className="h-3.5 w-3.5 mr-2" />
-            {dateRange?.from ? (
-              <span className="text-sm">
-                {dateRange.to ? (
-                  <>
-                    {format(dateRange.from, "dd/MM/yyyy", { locale: ptBR })}
-                    {dateRange.fromTime && ` ${dateRange.fromTime}`} -{" "}
-                    {format(dateRange.to, "dd/MM/yyyy", { locale: ptBR })}
-                    {dateRange.toTime && ` ${dateRange.toTime}`}
-                  </>
-                ) : (
-                  <>
-                    {format(dateRange.from, "dd/MM/yyyy", { locale: ptBR })}
-                    {dateRange.fromTime && ` ${dateRange.fromTime}`}
-                  </>
-                )}
-              </span>
-            ) : (
-              <span className="text-sm">Selecione um período</span>
-            )}
+            <X className="h-4 w-4" />
           </Button>
-        </PopoverTrigger>
-        <PopoverContent className="p-0 w-[300px]" align="start" sideOffset={5}>
-          <DateFilter onChange={handleDateChange} initialDate={dateRange} />
-        </PopoverContent>
-      </Popover>
+        )}
+      </div>
+
+      {/* Clear all filters button */}
+      {(dateRange || professionIds.length > 0 || funnelIds.length > 0 || advancedFilters.some(f => f.value.trim() !== '')) && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-9 flex items-center"
+          onClick={handleClearFilters}
+          title="Limpar todos os filtros"
+        >
+          <X className="h-4 w-4 mr-1" />
+          <span className="text-sm">Limpar filtros</span>
+        </Button>
+      )}
 
       {/* Modal de Filtros Avançados */}
       <Dialog open={advancedFilterOpen} onOpenChange={setAdvancedFilterOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[5Z0px]">
           <DialogHeader>
             <DialogTitle>Filtros Avançados</DialogTitle>
             <DialogDescription>
@@ -991,7 +1076,7 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
             </DialogDescription>
           </DialogHeader>
 
-          <div className="py-4">
+          <div className="py-4 max-h-[60vh] overflow-y-auto px-2">
             {pendingAdvancedFilters.map((filter, index) => (
               <div key={filter.id} className="mb-4 space-y-3">
                 {index > 0 && (
@@ -1051,7 +1136,7 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
                         onValueChange={(value) => handleAdvancedFilterChange(index, 'value', value)}
                       >
                         <SelectTrigger>
-                          <SelectValue placeholder="Selecione um tipo" />
+                          <SelectValue placeholder="Selecione um Evento" />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="LEAD">LEAD</SelectItem>
@@ -1059,14 +1144,30 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
                           <SelectItem value="ADD_PAYMENT_INFO">ADD_PAYMENT_INFO</SelectItem>
                           <SelectItem value="PURCHASE">PURCHASE</SelectItem>
                           <SelectItem value="PAGEVIEW">PAGEVIEW</SelectItem>
+                          <SelectItem value="PESQUISA_LEAD">PESQUISA_LEAD</SelectItem>
                         </SelectContent>
                       </Select>
                     ) : (
-                      <Input
-                        value={filter.value}
-                        onChange={(e) => handleAdvancedFilterChange(index, 'value', e.target.value)}
-                        placeholder="Valor"
-                      />
+                      <div className="relative">
+                        <Input
+                          value={filter.value}
+                          onChange={(e) => handleAdvancedFilterChange(index, 'value', e.target.value)}
+                          placeholder="Valor"
+                          className={filter.value ? "pr-8" : ""}
+                        />
+                        {filter.value && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="absolute right-0 top-0 h-10 w-8 rounded-l-none p-0"
+                            onClick={() => handleAdvancedFilterChange(index, 'value', '')}
+                          >
+                            <X className="h-3 w-3" />
+                            <span className="sr-only">Limpar</span>
+                          </Button>
+                        )}
+                      </div>
                     )}
                   </div>
                   
@@ -1126,7 +1227,19 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
           </div>
 
           <DialogFooter className="flex justify-between">
-            <div>
+            <div className="flex items-center">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setPendingAdvancedFilters([{ id: '1', property: 'user.fullname', operator: 'equals', value: '' }]);
+                  setPendingFilterCondition('AND');
+                }}
+                className="mr-2"
+              >
+                <X className="h-3.5 w-3.5 mr-1" />
+                Limpar filtros
+              </Button>
               <Button
                 variant="ghost"
                 size="sm"

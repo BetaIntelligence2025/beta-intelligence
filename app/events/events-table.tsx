@@ -178,6 +178,13 @@ function SortableHeader({
     }
   }, [column.accessorKey]);
 
+  // Prevenir conflito entre ordenamento e arraste
+  const handleSortClick = (e: React.MouseEvent) => {
+    if (resizing) return; // Não ordenar durante redimensionamento
+    e.stopPropagation(); // Impedir que o arraste seja acionado junto com a ordenação
+    onSort(column.accessorKey, isCurrentSortColumn && sortDirection === 'asc' ? 'desc' : 'asc');
+  };
+
   return (
     <th
       ref={setNodeRef}
@@ -188,35 +195,40 @@ function SortableHeader({
         position: 'relative',
         userSelect: 'none'
       }}
-      className={`group relative px-3 py-3.5 text-left text-sm font-semibold text-gray-900 ${isDragging ? 'opacity-50' : ''} ${resizing ? 'cursor-col-resize' : 'cursor-grab'}`}
-      {...attributes}
-      {...listeners}
-      onClick={() => onSort(column.accessorKey, isCurrentSortColumn && sortDirection === 'asc' ? 'desc' : 'asc')}
+      className={`group relative px-3 py-3.5 text-left text-sm font-semibold text-gray-900 ${isDragging ? 'opacity-50' : ''} ${resizing ? 'cursor-col-resize' : ''}`}
     >
-      <button
-        className="flex items-center justify-between w-full cursor-pointer text-[13px]"
-        type="button"
+      <div 
+        className="flex items-center justify-between"
+        {...(resizing ? {} : attributes)}
+        {...(resizing ? {} : listeners)}
       >
-        <span>{column.header}</span>
-        <div className="flex items-center">
-          {isCurrentSortColumn ? (
-            sortDirection === 'asc' ? (
-              <ChevronUp className="h-3 w-3" />
-            ) : (
-              <ChevronDown className="h-3 w-3" />
-            )
-          ) : (
-            <ArrowUpDown className="h-3 w-3 opacity-0 group-hover:opacity-100" />
+        <div 
+          className="flex items-center cursor-pointer"
+          onClick={handleSortClick}
+        >
+          {column.header}
+          {isCurrentSortColumn && (
+            <span className="ml-1">
+              {sortDirection === 'asc' ? (
+                <ChevronUp className="h-4 w-4" />
+              ) : (
+                <ChevronDown className="h-4 w-4" />
+              )}
+            </span>
+          )}
+          {!isCurrentSortColumn && (
+            <ArrowUpDown className="ml-1 h-4 w-4 opacity-0 group-hover:opacity-100" />
           )}
         </div>
-      </button>
+      </div>
       
-      {/* Resizer */}
+      {/* Resizer handle */}
       <div
-        className={`absolute right-0 top-0 h-full w-2 bg-transparent cursor-col-resize z-10 hover:bg-gray-300 ${resizing ? 'bg-gray-300' : ''}`}
+        className="absolute right-0 top-0 h-full w-2 cursor-col-resize group/resizer"
         onMouseDown={handleResizeMouseDown}
-        onClick={(e) => e.stopPropagation()}
-      />
+      >
+        <div className="h-full w-1 bg-transparent group-hover/resizer:bg-gray-300"></div>
+      </div>
     </th>
   );
 }
@@ -423,19 +435,24 @@ export function EventsTable({
     })
   )
 
-  const handleDragEnd = (result: any) => {
-    if (!result.destination) return
+  const handleDragEnd = (result: DragEndEvent) => {
+    const { active, over } = result;
     
-    const newOrderColumns = [...visibleColumns]
-    const [reorderedItem] = newOrderColumns.splice(result.source.index, 1)
-    newOrderColumns.splice(result.destination.index, 0, reorderedItem)
+    if (!over) return;
     
-    const newColumnsData = newOrderColumns
-      .map(id => defaultColumns.find(col => col.accessorKey === id))
-      .filter(Boolean) as Column[]
-    
-    useColumnsStore.setState({ visibleColumns: newOrderColumns })
-    // Não precisamos mais chamar setColumnsData pois o useMemo atualizará automaticamente
+    if (active.id !== over.id) {
+      const oldIndex = visibleColumns.indexOf(active.id as string);
+      const newIndex = visibleColumns.indexOf(over.id as string);
+      
+      if (oldIndex !== -1 && newIndex !== -1) {
+        const newOrderColumns = arrayMove(visibleColumns, oldIndex, newIndex);
+        
+        // Update the store with the new column order
+        useColumnsStore.setState({ visibleColumns: newOrderColumns });
+        
+        // No need to update columnsData as it will be updated via useMemo effect
+      }
+    }
   }
 
   // Calcular a quantidade de linhas que cabem na tela

@@ -12,7 +12,7 @@ export interface Column {
 
 export const columns: Column[] = [
   {
-    header: "Tipo",
+    header: "Evento",
     accessorKey: "event_type",
   },
   {

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from './ui/button'
 import { Input } from '@/components/ui/input'
@@ -27,6 +27,10 @@ export function Pagination({
 }: PaginationProps) {
   const [goToPageValue, setGoToPageValue] = useState<string>(String(pageIndex))
   
+  useEffect(() => {
+    setGoToPageValue(String(pageIndex))
+  }, [pageIndex])
+  
   const totalPages = Math.ceil(totalCount / perPage) || 1
   
   const handleGoToPage = () => {
@@ -34,6 +38,8 @@ export function Pagination({
     
     if (!isNaN(pageNumber) && pageNumber >= 1 && pageNumber <= totalPages) {
       onPageChange(pageNumber)
+    } else {
+      setGoToPageValue(String(pageIndex))
     }
   }
 

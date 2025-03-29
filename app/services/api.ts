@@ -478,12 +478,16 @@ export function useActiveSessionCount(params?: Partial<DateRangeParams>) {
     queryKey,
     queryFn: async () => {
       // Preparar parâmetros
-      const apiParams: Record<string, string> = {};
+      const apiParams: Record<string, string> = {
+        count_only: 'true'
+      };
       
       if (params?.from) apiParams.from = formatDateToISO(params.from, false);
       if (params?.to) apiParams.to = formatDateToISO(params.to, true);
       
-      const url = `${API_BASE_URL}/session/active?count_only=true`;
+      // Usar a API route do Next.js em vez de chamar diretamente o backend
+      const queryString = new URLSearchParams(apiParams).toString();
+      const url = `/api/session/active?${queryString}`;
       
       try {
         const response = await fetch(url, {

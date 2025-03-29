@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
     if (to) params.to = to
     
     // Construir URL da API usando diretamente o endpoint de sessões ativas
-    const apiUrl = `${API_BASE_URL}/session/active?${new URLSearchParams(params)}`
+    const apiUrl = `${API_BASE_URL}/session/active?count_only=true&${new URLSearchParams(params)}`
     
     try {
       // Buscar dados da API externa

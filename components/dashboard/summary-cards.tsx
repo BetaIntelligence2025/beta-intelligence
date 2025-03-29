@@ -9,7 +9,7 @@ import { format, subMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { DateRange } from "@/app/dashboard/date-filter-button";
 import { useActiveSessionCount } from "@/app/services/api";
-import { DashboardDataItem } from "@/app/dashboard/actions";
+import { DashboardDataItem } from "@/app/dashboard/types";
 
 export type CardType = "leads" | "clients" | "sessions" | "conversions" | null;
 

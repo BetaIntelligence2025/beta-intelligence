@@ -19,7 +19,7 @@ import {
 import { DateRange } from "./date-filter-button";
 import { CardType } from "@/components/dashboard/summary-cards";
 import { format } from "date-fns";
-import { DashboardDataItem, TimeFrame, fetchDashboardDataAction, processChartDataAction } from "./actions";
+import { DashboardDataItem, TimeFrame } from "./types";
 
 // Chart configuration
 const chartConfig = {
@@ -219,11 +219,18 @@ export default function VisualizationByPeriod(props: VisualizationByPeriodProps)
   // Use the user-provided date range if available, otherwise use default range
   const effectiveDateRange = useMemo(() => {
     if (!dateRange) {
+      console.log('No date range provided, using default date range:', defaultDateRange);
       return defaultDateRange;
     }
     
     const from = dateRange.from ? formatDateForApi(dateRange.from) : defaultDateRange.from;
     const to = dateRange.to ? formatDateForApi(dateRange.to, true) : defaultDateRange.to;
+    
+    console.log('Using effective date range:', { from, to });
+    console.log('Original date objects:', {
+      from: dateRange.from ? dateRange.from.toISOString() : null,
+      to: dateRange.to ? dateRange.to.toISOString() : null
+    });
     
     return { from, to };
   }, [dateRange, defaultDateRange, formatDateForApi]);
@@ -262,12 +269,24 @@ export default function VisualizationByPeriod(props: VisualizationByPeriodProps)
       
       setIsLoading(true);
       try {
-        // Use server action to process chart data
-        const processedData = await processChartDataAction(
-          periodData, 
-          timeFrame,
-          dateRange ? effectiveDateRange : null
-        );
+        // Use API endpoint to process chart data instead of server action
+        const response = await fetch('/api/dashboard/process', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            data: periodData,
+            timeFrame,
+            dateRange: dateRange ? effectiveDateRange : null
+          })
+        });
+        
+        if (!response.ok) {
+          throw new Error(`API responded with status ${response.status}`);
+        }
+        
+        const processedData = await response.json();
         
         if (!isCancelled && isMounted.current) {
           setChartData(processedData);
@@ -275,7 +294,8 @@ export default function VisualizationByPeriod(props: VisualizationByPeriodProps)
         }
       } catch (error) {
         if (!isCancelled && isMounted.current) {
-          setError('Error processing data');
+          console.error('Error processing chart data:', error);
+          setError(error instanceof Error ? error.message : 'Error processing data');
           setIsLoading(false);
         }
       }
@@ -288,7 +308,7 @@ export default function VisualizationByPeriod(props: VisualizationByPeriodProps)
     };
   }, [periodData, timeFrame, dateRange, effectiveDateRange]);
   
-  // Fetch data using server action when dependencies change
+  // Fetch data using API endpoint when dependencies change
   useEffect(() => {
     let isCancelled = false;
     
@@ -324,27 +344,49 @@ export default function VisualizationByPeriod(props: VisualizationByPeriodProps)
         // Convert selectedCard to string | undefined to match parameter type
         const cardTypeParam = selectedCard === null ? undefined : selectedCard;
         
-        // If no dateRange is provided, pass null to use all_data=true
-        const dateRangeParam = !dateRange ? null : effectiveDateRange;
+        // Build the URL with query parameters
+        const params = new URLSearchParams();
+        params.append('timeFrame', timeFrame);
         
-        // Use server action to fetch dashboard data
-        const result = await fetchDashboardDataAction(
-          timeFrame, 
-          dateRangeParam, 
-          cardTypeParam
-        );
+        if (cardTypeParam) {
+          params.append('cardType', cardTypeParam);
+        }
+        
+        // If dateRange is provided, add the date parameters
+        if (dateRange) {
+          params.append('from', effectiveDateRange.from);
+          params.append('to', effectiveDateRange.to);
+        }
+        
+        // Use API endpoint instead of server action
+        const url = `/api/dashboard/data?${params.toString()}`;
+        console.log('Fetching dashboard data from:', url);
+        
+        const response = await fetch(url, {
+          headers: {
+            'Accept': 'application/json'
+          },
+          cache: 'no-store'
+        });
+        
+        if (!response.ok) {
+          throw new Error(`API responded with status ${response.status}`);
+        }
+        
+        const result = await response.json();
         
         if (!isCancelled && isMounted.current) {
           setPeriodData(result.data);
           
-          // Check for errors from the server action
+          // Check for errors from the API
           if (result.errors) {
             setError(result.errors);
-            setIsLoading(false); // Set loading to false if there's an error
+            setIsLoading(false);
           }
         }
       } catch (error) {
         if (!isCancelled && isMounted.current) {
+          console.error('Error fetching dashboard data:', error);
           setError(error instanceof Error ? error.message : 'Erro desconhecido');
           setIsLoading(false);
         }

@@ -4,8 +4,8 @@ import { format, parse, parseISO } from 'date-fns';
 
 // Get the API base URL from environment variables
 const API_BASE_URL = process.env.NODE_ENV === 'development' 
-  ? process.env.API_URL
-  : (process.env.API_URL || '');
+  ? "http://localhost:8080"
+  : process.env.API_URL || 'http://130.211.239.149';
 
 // Ensure the URL has a protocol and hostname for absolute URLs
 function getAbsoluteUrl(path: string): string {

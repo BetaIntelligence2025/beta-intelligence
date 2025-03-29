@@ -52,13 +52,3 @@ export async function GET(request: NextRequest) {
     }, { status: 500 })
   }
 }
-
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json()
-    // Lógica para criar cliente
-    return NextResponse.json({ message: 'Cliente criado com sucesso' })
-  } catch (error) {
-    return NextResponse.json({ error: 'Erro ao criar cliente' }, { status: 500 })
-  }
-} 

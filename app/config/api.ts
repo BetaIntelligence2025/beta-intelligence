@@ -4,7 +4,7 @@
 
 // URL base da API com base no ambiente
 export const API_BASE_URL = process.env.NODE_ENV === 'production'
-  ? process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'
+  ? process.env.NEXT_PUBLIC_API_URL || 'https://api.beta-intelligence.com'
   : 'http://localhost:8080';
 
 
@@ -17,6 +17,7 @@ export const API_ENDPOINTS = {
   LEAD: `${API_BASE_URL}/lead`,
   CLIENT: `${API_BASE_URL}/client`,
   ANONYMOUS: `${API_BASE_URL}/anonymous`,
+  SESSION: `${API_BASE_URL}/session`,
 };
 
 /**

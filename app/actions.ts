@@ -128,14 +128,6 @@ export const signOutAction = async () => {
   const supabase = await createClient();
   await supabase.auth.signOut();
   
-  // Clear sidebar state cookie by setting it to expire in the past
-  const response = new Response(null, {
-    status: 302,
-    headers: {
-      Location: "/sign-in",
-      "Set-Cookie": `sidebar:state=; Path=/; Max-Age=0; SameSite=Lax`
-    },
-  });
-  
-  return response;
+  // A sessão anterior estará invalidada, não precisamos mais manipular cookies aqui
+  return redirect("/sign-in");
 };

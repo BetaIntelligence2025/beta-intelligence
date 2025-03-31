@@ -18,4 +18,5 @@ export type TimeFrame = 'Daily' | 'Weekly' | 'Monthly' | 'Yearly';
 export interface DashboardDataResult {
   data: DashboardDataItem[];
   errors?: string;
+  isLoading: boolean;
 } 

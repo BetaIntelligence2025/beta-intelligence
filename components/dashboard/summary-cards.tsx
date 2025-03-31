@@ -19,7 +19,8 @@ interface SummaryCardsProps {
   dateRange?: DateRange;
   dashboardData?: {
     data: DashboardDataItem[];
-    isLoading: boolean;
+    isLoading?: boolean;
+    errors?: string;
   };
 }
 
@@ -141,7 +142,7 @@ export default function SummaryCards({ onCardSelect, selectedCard, dateRange, da
       });
     } else {
       // Se estiver carregando, atualizar o estado para mostrar o loader
-      setSummaryData(prev => ({ ...prev, isLoading: dashboardData.isLoading }));
+      setSummaryData(prev => ({ ...prev, isLoading: dashboardData.isLoading ?? true }));
     }
   }, [dashboardData]);
   
@@ -165,11 +166,11 @@ export default function SummaryCards({ onCardSelect, selectedCard, dateRange, da
   };
 
   return (
-    <div className="overflow-hidden rounded-md border">
+    <div className="overflow-hidden rounded-md">
       <div className="grid space-y-2 md:grid-cols-2 lg:grid-cols-4 lg:space-y-0">
         <Card 
           className={cn(
-            "rounded-none border-y-transparent border-s-transparent hover:bg-muted cursor-pointer transition-all",
+            "rounded hover:bg-muted cursor-pointer transition-all",
             (selectedCard || internalSelectedCard) === "leads" && "bg-gray-100 border-gray-300"
           )}
           onClick={() => handleCardClick("leads")}
@@ -201,7 +202,7 @@ export default function SummaryCards({ onCardSelect, selectedCard, dateRange, da
         </Card>
         <Card 
           className={cn(
-            "rounded-none border-y-transparent border-s-transparent hover:bg-muted cursor-pointer transition-all",
+            "rounded-none hover:bg-muted cursor-pointer transition-all",
             (selectedCard || internalSelectedCard) === "clients" && "bg-gray-100 border-gray-300"
           )}
           onClick={() => handleCardClick("clients")}
@@ -233,7 +234,7 @@ export default function SummaryCards({ onCardSelect, selectedCard, dateRange, da
         </Card>
         <Card 
           className={cn(
-            "rounded-none border-y-transparent border-s-transparent hover:bg-muted cursor-pointer transition-all",
+            "rounded-none hover:bg-muted cursor-pointer transition-all",
             (selectedCard || internalSelectedCard) === "sessions" && "bg-gray-100 border-gray-300"
           )}
           onClick={() => handleCardClick("sessions")}
@@ -271,7 +272,7 @@ export default function SummaryCards({ onCardSelect, selectedCard, dateRange, da
         </Card>
         <Card 
           className={cn(
-            "rounded-none border-transparent hover:bg-muted cursor-pointer transition-all",
+            "rounded-none hover:bg-muted cursor-pointer transition-all",
             (selectedCard || internalSelectedCard) === "conversions" && "bg-gray-100 border-gray-300"
           )}
           onClick={() => handleCardClick("conversions")}

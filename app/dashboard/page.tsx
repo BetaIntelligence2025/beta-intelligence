@@ -1,255 +1,213 @@
-"use client"
+"use client";
 
-import { useState, useCallback, useMemo, useEffect, useRef } from "react";
-import SummaryCards, { CardType } from "@/components/dashboard/summary-cards";
-import VisualizationByPeriod from "./visualization-by-period";
-import { Button } from "@/components/ui/button";
-import { Download, RefreshCcw } from "lucide-react";
-import { DateFilterButton, DateRange } from "./date-filter-button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { fetchDashboardDataAction } from "./actions";
+import { useState, useEffect, useMemo } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
+import SummaryCards from '@/components/dashboard/summary-cards';
+import VisualizationByPeriod from './visualization-client';
+import { DateFilterButton } from './date-filter-button';
+import { fetchDashboardDataAction } from './actions';
+import { TimeFrame } from './types';
+import { CardType } from '@/components/dashboard/summary-cards';
+import { Button } from '@/components/ui/button';
+import { RefreshCw, Download } from 'lucide-react';
+import html2canvas from 'html2canvas';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 export default function Dashboard() {
-  const defaultDateRange = useMemo(() => {
-    const today = new Date();
-    const lastMonth = new Date();
-    lastMonth.setMonth(today.getMonth() - 1);
-    return {
-      from: lastMonth,
-      to: today
-    };
-  }, []);
+  const searchParams = useSearchParams();
+  const router = useRouter();
   
-  const [currentDateRange, setCurrentDateRange] = useState<DateRange | undefined>(defaultDateRange);
+  // Get active tab from URL or default to "geral"
+  const urlTab = searchParams.get('tab') || 'geral';
+  const [activeTab, setActiveTab] = useState(urlTab);
+  
   const [selectedCard, setSelectedCard] = useState<CardType>(null);
-  const [activeTab, setActiveTab] = useState("geral");
-  const [dashboardData, setDashboardData] = useState<{
-    data: any[];
-    isLoading: boolean;
-    errors?: string;
-  }>({ data: [], isLoading: true });
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [dashboardData, setDashboardData] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
-  const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const dashboardRef = useRef<HTMLDivElement>(null);
   
-  const handleDateRangeChange = useCallback((dateRange: DateRange | undefined) => {
-    if (!dateRange) {
-      setCurrentDateRange(defaultDateRange);
-      return;
-    }
-    
-    if (JSON.stringify(currentDateRange) !== JSON.stringify(dateRange)) {
-      setCurrentDateRange(dateRange);
-    }
-  }, [currentDateRange, defaultDateRange]);
+  // Parse default time frame from URL or use "Daily"
+  const timeFrame = (searchParams.get('timeFrame') || 'Daily') as TimeFrame;
   
-  // Função para capturar screenshot da dashboard
-  const captureScreenshot = useCallback(async () => {
-    if (!dashboardRef.current) return;
+  // Parse date range from search params if it exists - usando useMemo para evitar recriação do objeto
+  const dateRange = useMemo(() => {
+    const fromParam = searchParams.get('from');
+    if (fromParam) {
+      return {
+        from: fromParam,
+        to: searchParams.get('to') || fromParam
+      };
+    }
+    return null;
+  }, [searchParams]);
+  
+  // Função para trocar de tab
+  const handleTabChange = (value: string) => {
+    // Atualizar estado local imediatamente
+    setActiveTab(value);
     
+    // Atualizar URL sem recarregar a página
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('tab', value);
+    
+    // Usar replace em vez de push para evitar entradas extras no histórico
+    router.replace(`?${params.toString()}`, { scroll: false });
+  };
+  
+  // Sincronizar o estado com a URL quando a URL mudar
+  useEffect(() => {
+    if (urlTab !== activeTab) {
+      setActiveTab(urlTab);
+    }
+  }, [urlTab, activeTab]);
+  
+  // Função para atualizar os dados
+  async function refreshData() {
+    // Só carregar dados se estiver na tab geral
+    if (activeTab !== 'geral') return;
+
+    setIsLoading(true);
     try {
-      setIsDownloading(true);
+      // Fetch data using server action
+      const newData = await fetchDashboardDataAction(
+        timeFrame,
+        dateRange
+      );
+      setDashboardData(newData);
+    } catch (error) {
+      console.error("Erro ao atualizar dados:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  }
+  
+  // Função para baixar a tela atual como imagem
+  async function downloadDashboard() {
+    const dashboardElement = document.getElementById('dashboard-container');
+    if (!dashboardElement) return;
+    
+    setIsDownloading(true);
+    try {
+      // Mostrar notificação
+      console.log("Gerando imagem do dashboard...");
       
-      // Importar html2canvas dinamicamente apenas quando for necessário
-      const html2canvas = (await import('html2canvas')).default;
-      
-      // Captura a tela da dashboard
-      const canvas = await html2canvas(dashboardRef.current, {
-        logging: false,
+      // Configurações para melhor qualidade
+      const canvas = await html2canvas(dashboardElement, {
         scale: 2, // Escala 2x para melhor qualidade
-        useCORS: true, // Permite carregar imagens de outros domínios
-        allowTaint: true,
+        useCORS: true, // Permitir imagens de outros domínios
+        logging: false,
         backgroundColor: '#ffffff'
       });
       
-      // Converte o canvas para uma URL de dados
-      const image = canvas.toDataURL('image/png');
+      // Converter para PNG
+      const imgData = canvas.toDataURL('image/png');
       
-      // Cria um elemento <a> para baixar a imagem
+      // Criar link para download
       const link = document.createElement('a');
-      
-      // Formata a data atual para o nome do arquivo
-      const dateStr = new Date().toISOString().slice(0, 10);
-      const timeStr = new Date().toTimeString().slice(0, 8).replace(/:/g, '-');
-      const fileName = `dashboard_${dateStr}_${timeStr}.png`;
-      
-      link.download = fileName;
-      link.href = image;
+      const hoje = new Date();
+      const dataFormatada = hoje.toISOString().split('T')[0];
+      link.href = imgData;
+      link.download = `dashboard_${dataFormatada}.png`;
+      document.body.appendChild(link);
       link.click();
+      document.body.removeChild(link);
       
+      console.log("Download concluído!");
     } catch (error) {
-      alert('Não foi possível capturar a tela. Por favor, tente novamente.');
+      console.error("Erro ao gerar imagem:", error);
     } finally {
       setIsDownloading(false);
     }
-  }, []);
-
-  // Função para buscar dados da dashboard usando server actions
-  const fetchDashboardData = useCallback(async () => {
-    setDashboardData(prev => ({ ...prev, isLoading: true }));
-    setIsRefreshing(true);
-    
-    try {
-      // Formatar datas para API
-      const formatDate = (date: Date | undefined) => {
-        if (!date) return undefined;
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}T00:00:00Z`;
-      };
-      
-      const from = formatDate(currentDateRange?.from);
-      const to = formatDate(currentDateRange?.to);
-      const dateRangeParam = from && to ? { from, to } : null;
-      
-      // Usar server action para buscar dados
-      const result = await fetchDashboardDataAction(
-        "Daily", // Usar diário como padrão
-        dateRangeParam,
-        undefined // Sem filtro por tipo de card
-      );
-      
-      setDashboardData({ 
-        data: result.data, 
-        isLoading: false, 
-        errors: result.errors 
-      });
-    } catch (error) {
-      setDashboardData(prev => ({ 
-        ...prev, 
-        isLoading: false,
-        errors: error instanceof Error ? error.message : 'Erro desconhecido' 
-      }));
-    } finally {
-      setIsRefreshing(false);
-      
-      // Desabilitar botão por 2 segundos após refresh
-      if (refreshTimeoutRef.current) {
-        clearTimeout(refreshTimeoutRef.current);
-      }
-      
-      refreshTimeoutRef.current = setTimeout(() => {
-        refreshTimeoutRef.current = null;
-      }, 2000);
-    }
-  }, [currentDateRange]);
+  }
   
-  // Buscar dados quando o componente montar ou quando a data mudar
+  // Carregar dados iniciais apenas uma vez quando estiver na tab geral
   useEffect(() => {
-    fetchDashboardData();
-  }, [fetchDashboardData, currentDateRange]);
-  
-  const handleCardSelect = useCallback((cardType: CardType) => {
-    setSelectedCard(cardType);
-  }, []);
-  
-  const clearCardSelection = useCallback(() => {
-    setSelectedCard(null);
-  }, []);
-  
-  const selectedCardName = useMemo(() => {
-    switch (selectedCard) {
-      case 'leads': return 'Leads';
-      case 'clients': return 'Clientes';
-      case 'sessions': return 'Sessões';
-      case 'conversions': return 'Conversões';
-      default: return '';
+    if (!dashboardData && !isLoading && activeTab === 'geral') {
+      refreshData();
     }
-  }, [selectedCard]);
+  }, [dashboardData, isLoading, activeTab]);
   
-  const handleTabChange = useCallback((value: string) => {
-    setActiveTab(value);
-  }, []);
+  // Atualizar quando os parâmetros de URL mudarem para dados
+  // Usando uma string como dependência para evitar renderizações desnecessárias
+  const searchParamsString = useMemo(() => {
+    return JSON.stringify({
+      timeFrame,
+      dateRange
+    });
+  }, [timeFrame, dateRange]);
+  
+  useEffect(() => {
+    // Não fazer requisição se não estiver na tab geral
+    if (activeTab === 'geral') {
+      refreshData();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParamsString, activeTab]);
+  
+  // Função para lidar com a seleção de cards
+  const handleCardSelect = (cardType: CardType) => {
+    setSelectedCard(cardType);
+  };
   
   return (
-    <div ref={dashboardRef}>
-      <div className="mb-4 flex flex-col justify-between space-y-6 lg:flex-row lg:items-center lg:space-y-2">
-        <h2 className="text-2xl font-bold tracking-tight lg:text-3xl">Dashboard</h2>
-        <div>
-          <div className="flex items-center space-x-2">
-            <DateFilterButton onChange={handleDateRangeChange} />
-            <Button 
-              size="sm" 
-              variant="outline"
-              className="gap-2"
-              onClick={fetchDashboardData}
-              disabled={isRefreshing || refreshTimeoutRef.current !== null}
-            >
-              <RefreshCcw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-              {isRefreshing ? 'Atualizando...' : 'Atualizar'}
-            </Button>
-            <Button 
-              size="sm" 
-              className="gap-2"
-              onClick={captureScreenshot}
-              disabled={isDownloading}
-            >
-              <Download className={`h-4 w-4 ${isDownloading ? 'animate-pulse' : ''}`} />
-              {isDownloading ? 'Gerando...' : 'Download'}
-            </Button>
-          </div>
+    <div id="dashboard-container" className="flex flex-col gap-4 p-4 md:p-8 bg-white">
+      <div className="flex flex-col md:flex-row justify-between gap-4">
+        <h1 className="text-3xl font-bold">Dashboard</h1>
+        <div className="flex items-center gap-2">
+          <DateFilterButton />
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={refreshData}
+            disabled={isLoading}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+            {isLoading ? 'Atualizando...' : 'Atualizar'}
+          </Button>
+          <Button  
+            size="sm"
+            onClick={downloadDashboard}
+            disabled={isDownloading || isLoading}
+          >
+            <Download className="h-4 w-4 mr-2" />
+            {isDownloading ? 'Gerando...' : 'Download'}
+          </Button>
         </div>
       </div>
       
-      <Tabs defaultValue="geral" value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <TabsList className="mb-4">
-          <TabsTrigger value="geral">Geral</TabsTrigger>
-          <TabsTrigger value="funis">Funis</TabsTrigger>
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full mt-4">
+        <TabsList className="mb-4 w-auto border  shadow-sm rounded-lg">
+          <TabsTrigger value="geral" className="px-4 py-1 text-sm">Geral</TabsTrigger>
+          <TabsTrigger value="funis" className="px-4 py-1 text-sm">Funis</TabsTrigger>
         </TabsList>
         
-        <TabsContent value="geral" className="space-y-4">
+        <TabsContent value="geral" className={isLoading ? "opacity-60 pointer-events-none" : ""}>
           <SummaryCards 
-            onCardSelect={handleCardSelect} 
-            selectedCard={selectedCard} 
-            dateRange={currentDateRange}
-            dashboardData={dashboardData}
+            dashboardData={dashboardData} 
+            onCardSelect={handleCardSelect}
+            selectedCard={selectedCard}
           />
           
           <div className="mt-4">
-            {selectedCard && (
-              <div className="mb-2 flex items-center justify-between">
-                <div className="flex items-center">
-                  <div className="rounded-full h-3 w-3 mr-2" 
-                       style={{ 
-                         backgroundColor: selectedCard === 'leads' ? "#1F2937" : // Cinza escuro
-                                          selectedCard === 'clients' ? "#4B5563" : // Cinza médio
-                                          selectedCard === 'sessions' ? "#6B7280" : // Cinza medio-claro
-                                          "#9CA3AF" // Cinza claro para conversions
-                       }} />
-                  <span className="text-sm font-medium">
-                    Visualizando dados de: <strong>{selectedCardName}</strong>
-                  </span>
-                </div>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={clearCardSelection} 
-                  className="text-xs"
-                >
-                  Limpar seleção
-                </Button>
-              </div>
-            )}
             <VisualizationByPeriod 
-              title={selectedCard ? selectedCardName : "Dados"} 
-              dateRange={currentDateRange}
-              selectedCard={selectedCard}
+              title="Visualização por Período" 
               dashboardData={dashboardData}
+              selectedCard={selectedCard}
             />
           </div>
         </TabsContent>
         
-        <TabsContent value="funis" className="space-y-4">
-          <div className="flex flex-col items-center justify-center p-8 rounded-md border border-dashed">
-            <h3 className="text-xl font-semibold mb-2">Visualização de Funis</h3>
-            <p className="text-gray-500 text-center mb-4">
-              Esta visualização mostrará os funis de conversão do seu negócio.
+        <TabsContent value="funis" className="p-4 border rounded-md bg-gray-50">
+          <div className="text-center p-8">
+            <h3 className="text-xl font-medium mb-2">Funis em desenvolvimento</h3>
+            <p className="text-gray-500">
+              Esta seção mostrará visualizações de funis de conversão e jornadas de usuários.
             </p>
-            <p className="text-sm text-muted-foreground">
-              Em desenvolvimento. Disponível em breve.
-            </p>
+            <div className="mt-6 flex justify-center">
+              <Button variant="outline" onClick={() => handleTabChange('geral')}>
+                Voltar para Dashboard Geral
+              </Button>
+            </div>
           </div>
         </TabsContent>
       </Tabs>

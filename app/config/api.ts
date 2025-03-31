@@ -5,7 +5,7 @@
 // URL base da API com base no ambiente
 export const API_BASE_URL = process.env.NODE_ENV === 'development'
   ? 'http://localhost:8080'
-  : process.env.API_URL || 'http://130.211.239.149';
+  : process.env.API_URL || 'https://api-bi.cursobeta.com.br';
 
 
 // URLs específicas para cada endpoint

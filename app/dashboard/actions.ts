@@ -1,11 +1,12 @@
 "use server";
 
 import { format, parse, parseISO } from 'date-fns';
+import { unstable_cache } from 'next/cache';
 
 // Get the API base URL from environment variables
 const API_BASE_URL = process.env.NODE_ENV === 'development' 
   ? "http://localhost:8080"
-  : process.env.API_URL || 'http://130.211.239.149';
+  : process.env.API_URL || 'https://api-bi.cursobeta.com.br';
 
 // Ensure the URL has a protocol and hostname for absolute URLs
 function getAbsoluteUrl(path: string): string {
@@ -31,6 +32,16 @@ export interface DashboardDataItem {
 export interface DashboardDataResult {
   data: DashboardDataItem[];
   errors?: string;
+  isLoading: boolean;
+}
+
+// Interface for processed dashboard data items
+export interface ProcessedDashboardDataItem {
+  period: string;
+  leads: number;
+  clients: number;
+  sessions: number;
+  conversions: number;
 }
 
 /**
@@ -101,168 +112,179 @@ export async function fetchDashboardDataAction(
   dateRange: { from: string; to: string } | null,
   cardType?: string
 ): Promise<DashboardDataResult> {
-  try {
-    // Determine if we should use all_data=true (when no date range is provided)
-    const useAllData = !dateRange || (!dateRange.from && !dateRange.to);
-    
-    // Set up the API query parameters based on whether we're using all data or a date range
-    let queryParams: string;
-    let fromDate: string | null = null;
-    let toDate: string | null = null;
-    
-    if (useAllData) {
-      // When no date filter is applied, use all_data=true to get full history
-      queryParams = 'count_only=true&all_data=true';
-    } else {
-      // When a date range is selected, use from/to parameters
-      // Make sure dates are exactly as provided, without any adjustments
-      fromDate = dateRange.from;
-      toDate = dateRange.to;
-      queryParams = `count_only=true&from=${fromDate}&to=${toDate}&period=true`;
-    }
-    
-    // Normalize card type
-    const normalizedCardType = cardType 
-      ? cardType.endsWith('s') ? cardType : `${cardType}s` 
-      : undefined;
-    
-    try {
-      // Build the URLs based on the card type
-      let sessionUrl;
-      let leadUrl;
-      let clientUrl;
-      
-      // Create absolute URLs with trailing slash
-      if (normalizedCardType) {
-        switch (normalizedCardType) {
-          case 'sessions':
-            sessionUrl = getAbsoluteUrl(`/session/?${queryParams}`);
-            break;
-          case 'leads':
-            leadUrl = getAbsoluteUrl(`/lead/?${queryParams}`);
-            break;
-          case 'clients':
-            clientUrl = getAbsoluteUrl(`/client/?${queryParams}`);
-            break;
-          case 'conversions':
-            // Conversions requires both leads and clients data
-            leadUrl = getAbsoluteUrl(`/lead/?${queryParams}`);
-            clientUrl = getAbsoluteUrl(`/client/?${queryParams}`);
-            break;
-        }
-      } else {
-        // If no specific card, we need all data
-        sessionUrl = getAbsoluteUrl(`/session/?${queryParams}`);
-        leadUrl = getAbsoluteUrl(`/lead/?${queryParams}`);
-        clientUrl = getAbsoluteUrl(`/client/?${queryParams}`);
-      }
-
-      // Fetch data from the specified endpoints
-      let sessionData: DashboardDataItem[] = [];
-      let leadData: DashboardDataItem[] = [];
-      let clientData: DashboardDataItem[] = [];
-      let conversionData: DashboardDataItem[] = [];
-      
-      // Fetch data in parallel
-      const promises = [];
-      
-      if (sessionUrl) {
-        promises.push(fetchApiData(sessionUrl, 'sessions').then(data => { sessionData = data; }));
-      }
-      
-      if (leadUrl) {
-        promises.push(fetchApiData(leadUrl, 'leads').then(data => { leadData = data; }));
-      }
-      
-      if (clientUrl) {
-        promises.push(fetchApiData(clientUrl, 'clients').then(data => { clientData = data; }));
-      }
-      
-      // Wait for all fetch operations to complete
+  return unstable_cache(
+    async () => {
       try {
-        await Promise.all(promises);
-      } catch (error) {
-        return { 
-          data: [],
-          errors: `Error fetching data: ${error instanceof Error ? error.message : 'Unknown error'}`
-        };
-      }
-      
-      // Generate conversion data if we have both leads and clients
-      if (leadData.length > 0 && clientData.length > 0) {
-        // Get all unique dates using the helper function
-        const leadDates = leadData.map(item => item.date);
-        const clientDates = clientData.map(item => item.date);
-        const dates = getUniqueDates([leadDates, clientDates]);
+        // Determine if we should use all_data=true (when no date range is provided)
+        const useAllData = !dateRange || (!dateRange.from && !dateRange.to);
         
-        // For each date, calculate conversions (clients as a percentage of leads)
-        conversionData = dates.map(date => {
-          const leadsForDate = leadData.find(item => item.date === date)?.count || 0;
-          const clientsForDate = clientData.find(item => item.date === date)?.count || 0;
+        // Set up the API query parameters based on whether we're using all data or a date range
+        let queryParams: string;
+        let fromDate: string | null = null;
+        let toDate: string | null = null;
+        
+        if (useAllData) {
+          // When no date filter is applied, use all_data=true to get full history
+          queryParams = 'count_only=true&all_data=true';
+        } else {
+          // When a date range is selected, use from/to parameters
+          // Make sure dates are exactly as provided, without any adjustments
+          fromDate = dateRange.from;
+          toDate = dateRange.to;
+          queryParams = `count_only=true&from=${fromDate}&to=${toDate}&period=true`;
+        }
+        
+        // Normalize card type
+        const normalizedCardType = cardType 
+          ? cardType.endsWith('s') ? cardType : `${cardType}s` 
+          : undefined;
+        
+        try {
+          // Build the URLs based on the card type
+          let sessionUrl;
+          let leadUrl;
+          let clientUrl;
           
-          // Conversion is the percentage of leads that became clients
-          // If there are zero leads, default to 0 to avoid division by zero
-          const conversionRate = leadsForDate > 0 
-            ? (clientsForDate / leadsForDate) * 100 
-            : 0;
+          // Create absolute URLs with trailing slash
+          if (normalizedCardType) {
+            switch (normalizedCardType) {
+              case 'sessions':
+                sessionUrl = getAbsoluteUrl(`/session/?${queryParams}`);
+                break;
+              case 'leads':
+                leadUrl = getAbsoluteUrl(`/lead/?${queryParams}`);
+                break;
+              case 'clients':
+                clientUrl = getAbsoluteUrl(`/client/?${queryParams}`);
+                break;
+              case 'conversions':
+                // Conversions requires both leads and clients data
+                leadUrl = getAbsoluteUrl(`/lead/?${queryParams}`);
+                clientUrl = getAbsoluteUrl(`/client/?${queryParams}`);
+                break;
+            }
+          } else {
+            // If no specific card, we need all data
+            sessionUrl = getAbsoluteUrl(`/session/?${queryParams}`);
+            leadUrl = getAbsoluteUrl(`/lead/?${queryParams}`);
+            clientUrl = getAbsoluteUrl(`/client/?${queryParams}`);
+          }
+
+          // Fetch data from the specified endpoints
+          let sessionData: DashboardDataItem[] = [];
+          let leadData: DashboardDataItem[] = [];
+          let clientData: DashboardDataItem[] = [];
+          let conversionData: DashboardDataItem[] = [];
+          
+          // Fetch data in parallel
+          const promises = [];
+          
+          if (sessionUrl) {
+            promises.push(fetchApiData(sessionUrl, 'sessions').then(data => { sessionData = data; }));
+          }
+          
+          if (leadUrl) {
+            promises.push(fetchApiData(leadUrl, 'leads').then(data => { leadData = data; }));
+          }
+          
+          if (clientUrl) {
+            promises.push(fetchApiData(clientUrl, 'clients').then(data => { clientData = data; }));
+          }
+          
+          // Wait for all fetch operations to complete
+          try {
+            await Promise.all(promises);
+          } catch (error) {
+            return { 
+              data: [],
+              errors: `Error fetching data: ${error instanceof Error ? error.message : 'Unknown error'}`,
+              isLoading: false
+            };
+          }
+          
+          // Generate conversion data if we have both leads and clients
+          if (leadData.length > 0 && clientData.length > 0) {
+            // Get all unique dates using the helper function
+            const leadDates = leadData.map(item => item.date);
+            const clientDates = clientData.map(item => item.date);
+            const dates = getUniqueDates([leadDates, clientDates]);
+            
+            // For each date, calculate conversions (clients as a percentage of leads)
+            conversionData = dates.map(date => {
+              const leadsForDate = leadData.find(item => item.date === date)?.count || 0;
+              const clientsForDate = clientData.find(item => item.date === date)?.count || 0;
+              
+              // Conversion is the percentage of leads that became clients
+              // If there are zero leads, default to 0 to avoid division by zero
+              const conversionRate = leadsForDate > 0 
+                ? (clientsForDate / leadsForDate) * 100 
+                : 0;
+              
+              return {
+                date,
+                count: Math.round(conversionRate),
+                type: 'conversions'
+              };
+            });
+          }
+          
+          // Merge all data
+          let combinedData: DashboardDataItem[] = [
+            ...sessionData,
+            ...leadData,
+            ...clientData,
+            ...conversionData
+          ];
+          
+          // Filter data based on card type if specified
+          if (normalizedCardType) {
+            combinedData = combinedData.filter(item => item.type === normalizedCardType);
+          }
+          
+          // If a date range was provided, ensure we only include data within that range
+          if (fromDate && toDate) {
+            // Parse the date strings to get just YYYY-MM-DD for comparison
+            const fromDateStr = fromDate.split('T')[0];
+            const toDateStr = toDate.split('T')[0];
+            
+            // Only include data points within the date range
+            const beforeFilter = combinedData.length;
+            combinedData = combinedData.filter(item => {
+              const itemDate = item.date.split('T')[0]; // Remove any time part
+              const inRange = itemDate >= fromDateStr && itemDate <= toDateStr;
+              
+              return inRange;
+            });
+            
+            return {
+              data: combinedData,
+              isLoading: false
+            };
+          }
           
           return {
-            date,
-            count: Math.round(conversionRate),
-            type: 'conversions'
+            data: combinedData,
+            isLoading: false
           };
-        });
-      }
-      
-      // Merge all data
-      let combinedData: DashboardDataItem[] = [
-        ...sessionData,
-        ...leadData,
-        ...clientData,
-        ...conversionData
-      ];
-      
-      // Filter data based on card type if specified
-      if (normalizedCardType) {
-        combinedData = combinedData.filter(item => item.type === normalizedCardType);
-      }
-      
-      // If a date range was provided, ensure we only include data within that range
-      if (fromDate && toDate) {
-        // Parse the date strings to get just YYYY-MM-DD for comparison
-        const fromDateStr = fromDate.split('T')[0];
-        const toDateStr = toDate.split('T')[0];
-        
-        // Only include data points within the date range
-        const beforeFilter = combinedData.length;
-        combinedData = combinedData.filter(item => {
-          const itemDate = item.date.split('T')[0]; // Remove any time part
-          const inRange = itemDate >= fromDateStr && itemDate <= toDateStr;
           
-          return inRange;
-        });
-        
+        } catch (error) {
+          return {
+            data: [],
+            errors: error instanceof Error ? error.message : 'Unknown error',
+            isLoading: false
+          };
+        }
+      } catch (error) {
         return {
-          data: combinedData
+          data: [],
+          errors: error instanceof Error ? error.message : 'Unknown error',
+          isLoading: false
         };
       }
-      
-      return {
-        data: combinedData
-      };
-      
-    } catch (error) {
-      return {
-        data: [],
-        errors: error instanceof Error ? error.message : 'Unknown error'
-      };
-    }
-  } catch (error) {
-    return {
-      data: [],
-      errors: error instanceof Error ? error.message : 'Unknown error'
-    };
-  }
+    },
+    ['dashboard-data', timeFrame, JSON.stringify(dateRange), cardType || 'all'],
+    { revalidate: 60, tags: ['dashboard'] }
+  )();
 }
 
 /**
@@ -495,4 +517,244 @@ export async function processChartDataAction(
     console.error('Error processing data:', error);
     throw error;
   }
+}
+
+/**
+ * Server action to process dashboard data with timeframe formatting
+ */
+export async function processDashboardDataAction(
+  data: DashboardDataItem[],
+  timeFrame: TimeFrame,
+  dateRange: { from: string; to: string } | null
+): Promise<ProcessedDashboardDataItem[]> {
+  return unstable_cache(
+    async () => {
+      try {
+        // Implement processing logic directly instead of using API
+        // Extract from and to dates from dateRange if available
+        let fromDate: string | null = null;
+        let toDate: string | null = null;
+        
+        if (dateRange && dateRange.from) {
+          fromDate = dateRange.from.split('T')[0]; // Get just the date part
+        }
+        
+        if (dateRange && dateRange.to) {
+          toDate = dateRange.to.split('T')[0]; // Get just the date part
+        }
+        
+        // Group data by date and type
+        const groupedByDate: Record<string, ProcessedDashboardDataItem> = {};
+        
+        // Group by date and initialize all counts to 0
+        data.forEach((item) => {
+          // Extract just the date part (YYYY-MM-DD)
+          const datePart = item.date.split('T')[0];
+          
+          // If we don't have this date yet, initialize all counts to 0
+          if (!groupedByDate[datePart]) {
+            groupedByDate[datePart] = {
+              period: datePart,
+              leads: 0,
+              clients: 0,
+              sessions: 0,
+              conversions: 0
+            };
+          }
+          
+          // Add the count to the appropriate type
+          switch (item.type) {
+            case 'leads':
+              groupedByDate[datePart].leads += Number(item.count);
+              break;
+            case 'clients':
+              groupedByDate[datePart].clients += Number(item.count);
+              break;
+            case 'sessions':
+              groupedByDate[datePart].sessions += Number(item.count);
+              break;
+            case 'conversions':
+              groupedByDate[datePart].conversions += Number(item.count);
+              break;
+          }
+        });
+        
+        // Fill in missing dates if we have enough data
+        if (Object.keys(groupedByDate).length > 0) {
+          try {
+            // Get all dates from the data and sort them
+            const dates = Object.keys(groupedByDate).map(date => new Date(date));
+            dates.sort((a, b) => a.getTime() - b.getTime());
+            
+            // If we have at least two dates, we can fill in the gaps
+            if (dates.length >= 2) {
+              // If we have date range boundaries, use them instead of min/max from data
+              let startDate = dates[0];
+              let endDate = dates[dates.length - 1];
+              
+              if (fromDate) {
+                const fromDateObj = new Date(fromDate);
+                if (fromDateObj > startDate) {
+                  startDate = fromDateObj;
+                }
+              }
+              
+              if (toDate) {
+                const toDateObj = new Date(toDate);
+                if (toDateObj < endDate) {
+                  endDate = toDateObj;
+                }
+              }
+              
+              // Create dates for each day in the range
+              const currentDate = new Date(startDate);
+              while (currentDate <= endDate) {
+                const dateStr = format(currentDate, 'yyyy-MM-dd');
+                
+                // If this date doesn't exist in our data, add it with zeros
+                if (!groupedByDate[dateStr]) {
+                  groupedByDate[dateStr] = {
+                    period: dateStr,
+                    leads: 0,
+                    clients: 0,
+                    sessions: 0,
+                    conversions: 0
+                  };
+                }
+                
+                // Move to next day
+                currentDate.setDate(currentDate.getDate() + 1);
+              }
+            }
+          } catch (error) {
+            console.error('Error filling dates:', error);
+          }
+        }
+        
+        // Convert to array and ensure we only include dates within the range
+        let processedData = Object.values(groupedByDate);
+        
+        // Apply final filter to ensure only dates within range are included
+        if (fromDate && toDate) {
+          processedData = processedData.filter(item => {
+            const itemDate = item.period.split('T')[0];
+            return itemDate >= fromDate && itemDate <= toDate;
+          });
+        }
+        
+        // Sort by date to ensure correct order
+        processedData.sort((a, b) => {
+          const dateA = new Date(a.period);
+          const dateB = new Date(b.period);
+          return dateA.getTime() - dateB.getTime();
+        });
+        
+        // Apply date formatting based on timeframe
+        processedData = processedData.map(item => {
+          const dateObj = parseISO(item.period);
+          
+          // Format the period based on the time frame
+          let formattedPeriod = item.period;
+          switch (timeFrame) {
+            case "Daily":
+              // Ensure we have a consistent date format no matter what the input is
+              try {
+                formattedPeriod = format(dateObj, 'dd/MM/yyyy');
+              } catch (e) {
+                formattedPeriod = item.period; // Fallback to original
+              }
+              break;
+            case "Weekly":
+              const weekStart = new Date(dateObj);
+              weekStart.setDate(dateObj.getDate() - dateObj.getDay() + 1); // Monday
+              const weekEnd = new Date(weekStart);
+              weekEnd.setDate(weekStart.getDate() + 6); // Sunday
+              formattedPeriod = `${format(weekStart, 'dd/MM')} - ${format(weekEnd, 'dd/MM')}`;
+              break;
+            case "Monthly":
+              formattedPeriod = format(dateObj, 'MMM yyyy');
+              break;
+            case "Yearly":
+              formattedPeriod = format(dateObj, 'yyyy');
+              break;
+          }
+          
+          return {
+            ...item,
+            period: formattedPeriod
+          };
+        });
+        
+        // Sort by date
+        processedData.sort((a, b) => {
+          // For daily, we can parse dd/MM/yyyy
+          if (timeFrame === "Daily") {
+            const dateA = parse(a.period, 'dd/MM/yyyy', new Date());
+            const dateB = parse(b.period, 'dd/MM/yyyy', new Date());
+            return dateA.getTime() - dateB.getTime();
+          }
+          // For weekly, we'll use the first date in the range
+          else if (timeFrame === "Weekly") {
+            const startDateA = a.period.split(' - ')[0];
+            const startDateB = b.period.split(' - ')[0];
+            const dateA = parse(startDateA, 'dd/MM', new Date());
+            const dateB = parse(startDateB, 'dd/MM', new Date());
+            return dateA.getTime() - dateB.getTime();
+          }
+          // For monthly, we'll parse MMM yyyy
+          else if (timeFrame === "Monthly") {
+            const dateA = parse(a.period, 'MMM yyyy', new Date());
+            const dateB = parse(b.period, 'MMM yyyy', new Date());
+            return dateA.getTime() - dateB.getTime();
+          }
+          // For yearly, just compare years
+          else {
+            return parseInt(a.period) - parseInt(b.period);
+          }
+        });
+        
+        // If timeframe is not daily, aggregate data by period
+        if (timeFrame !== "Daily") {
+          const aggregatedData: Record<string, ProcessedDashboardDataItem> = {};
+          
+          // First pass: create the aggregation buckets based on formatted periods
+          processedData.forEach(item => {
+            if (!aggregatedData[item.period]) {
+              aggregatedData[item.period] = {
+                period: item.period,
+                leads: 0,
+                clients: 0,
+                sessions: 0,
+                conversions: 0
+              };
+            }
+            
+            // Add values
+            aggregatedData[item.period].leads += item.leads || 0;
+            aggregatedData[item.period].clients += item.clients || 0;
+            aggregatedData[item.period].sessions += item.sessions || 0;
+          });
+          
+          // Recalculate conversions for each period
+          Object.values(aggregatedData).forEach(item => {
+            if (item.leads > 0) {
+              item.conversions = Math.round((item.clients / item.leads) * 100);
+            } else {
+              item.conversions = 0;
+            }
+          });
+          
+          processedData = Object.values(aggregatedData);
+        }
+        
+        return processedData;
+      } catch (error) {
+        console.error('Error processing dashboard data:', error);
+        return [];
+      }
+    },
+    // Include timeFrame as a part of the cache key so different timeframes don't share cache
+    ['dashboard-process', timeFrame, JSON.stringify(dateRange), String(data.length)],
+    { revalidate: 60, tags: ['dashboard-data'] }
+  )();
 } 

@@ -5,7 +5,6 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import SummaryCards from '@/components/dashboard/summary-cards';
 import VisualizationByPeriod from './visualization-client';
 import { DateFilterButton } from './date-filter-button';
-import { fetchDashboardDataAction } from './actions';
 import { TimeFrame } from './types';
 import { CardType } from '@/components/dashboard/summary-cards';
 import { Button } from '@/components/ui/button';
@@ -68,11 +67,32 @@ export default function Dashboard() {
 
     setIsLoading(true);
     try {
-      // Fetch data using server action
-      const newData = await fetchDashboardDataAction(
-        timeFrame,
-        dateRange
-      );
+      // Fetch data using API endpoint instead of server action
+      const params = new URLSearchParams();
+      params.set('timeFrame', timeFrame);
+      
+      if (dateRange) {
+        params.set('from', dateRange.from);
+        params.set('to', dateRange.to);
+      }
+      
+      // Add cache busting parameter
+      params.set('_t', Date.now().toString());
+      
+      const response = await fetch(`/api/dashboard/data?${params.toString()}`, {
+        headers: {
+          'Accept': 'application/json',
+          'Cache-Control': 'no-cache'
+        },
+        cache: 'no-store',
+        next: { revalidate: 0 }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`API responded with status ${response.status}`);
+      }
+      
+      const newData = await response.json();
       setDashboardData(newData);
     } catch (error) {
       console.error("Erro ao atualizar dados:", error);

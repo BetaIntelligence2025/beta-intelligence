@@ -20,7 +20,6 @@ import { DateRange } from "./date-filter-button";
 import { CardType } from "@/components/dashboard/summary-cards";
 import { format } from "date-fns";
 import { DashboardDataItem, TimeFrame } from "./types";
-import { processDashboardDataAction } from './actions';
 
 // Chart configuration
 const chartConfig = {
@@ -286,17 +285,29 @@ export default function VisualizationByPeriod(props: VisualizationByPeriodProps)
       }
       
       try {
-        // Use server action to process data instead of API endpoint
-        const processedData = await processDashboardDataAction(
-          periodData,
-          timeFrame,
-          dateRange && dateRange.from && dateRange.to 
-            ? { 
-                from: dateRange.from.toISOString(), 
-                to: dateRange.to.toISOString() 
-              } 
-            : null
-        );
+        // Use API endpoint instead of direct server action
+        const response = await fetch('/api/dashboard/process', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            data: periodData,
+            timeFrame,
+            dateRange: dateRange && dateRange.from && dateRange.to 
+              ? { 
+                  from: dateRange.from.toISOString(), 
+                  to: dateRange.to.toISOString() 
+                } 
+              : null
+          })
+        });
+        
+        if (!response.ok) {
+          throw new Error(`API responded with status ${response.status}`);
+        }
+        
+        const processedData = await response.json();
         
         if (!isCancelled && isMounted.current) {
           setChartData(processedData);

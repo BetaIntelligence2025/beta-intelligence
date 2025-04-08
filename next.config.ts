@@ -4,8 +4,20 @@ const nextConfig: NextConfig = {
   /* config options here */
   experimental: {
     serverActions: {
-      bodySizeLimit: '2mb'
+      bodySizeLimit: '8mb'
     },
+  },
+  // Configurações de API
+  api: {
+    responseLimit: '8mb',
+    bodyParser: {
+      sizeLimit: '8mb'
+    }
+  },
+  // Configurações de servidor
+  serverRuntimeConfig: {
+    // Aumentar timeout para 30 segundos
+    apiTimeout: 30000,
   },
   async headers() {
     return [

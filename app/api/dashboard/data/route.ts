@@ -5,6 +5,10 @@ import { API_BASE_URL } from '@/app/config/api';
 // Make cache dynamic based on request
 export const dynamic = 'force-dynamic';
 
+// Configurações de timeout e cache
+const TIMEOUT_MS = 15000; // 15 segundos
+const CACHE_TTL = 60; // 1 minuto
+
 /**
  * GET handler for optimized dashboard data fetching
  */
@@ -67,7 +71,7 @@ export async function GET(request: NextRequest) {
     }
     
     try {
-      // Fetch all data in parallel
+      // Fetch all data in parallel with timeout
       const results = await Promise.all([
         sessionUrl ? fetchApiData(sessionUrl, 'sessions') : Promise.resolve([]),
         leadUrl ? fetchApiData(leadUrl, 'leads') : Promise.resolve([]),
@@ -130,7 +134,7 @@ export async function GET(request: NextRequest) {
       }, {
         status: 200,
         headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Cache-Control': `public, s-maxage=${CACHE_TTL}, stale-while-revalidate=${CACHE_TTL * 2}`,
           'Pragma': 'no-cache',
           'Expires': '0'
         }
@@ -156,12 +160,16 @@ export async function GET(request: NextRequest) {
 }
 
 /**
- * Helper function to fetch data from an API endpoint
+ * Helper function to fetch data from an API endpoint with timeout
  */
 async function fetchApiData(url: string, type: string): Promise<DashboardDataItem[]> {
   try {
+    // Criar um controller para timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
     const response = await fetch(url, { 
-      cache: 'no-store',
+      signal: controller.signal,
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
@@ -169,6 +177,8 @@ async function fetchApiData(url: string, type: string): Promise<DashboardDataIte
         'Pragma': 'no-cache'
       }
     });
+    
+    clearTimeout(timeoutId);
     
     if (!response.ok) {
       console.error(`Error fetching ${type} data: ${response.status} ${response.statusText}`);
@@ -197,7 +207,11 @@ async function fetchApiData(url: string, type: string): Promise<DashboardDataIte
     
     return [];
   } catch (error) {
-    console.error(`Error fetching ${type} data:`, error);
+    if (error instanceof Error && error.name === 'AbortError') {
+      console.error(`Timeout fetching ${type} data from ${url}`);
+    } else {
+      console.error(`Error fetching ${type} data:`, error);
+    }
     return [];
   }
 } 

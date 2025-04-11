@@ -17,12 +17,42 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     
+    // Verificar se essa é uma requisição sem filtros (após limpeza)
+    // Contamos apenas os parâmetros básicos: page, limit, sortBy, sortDirection
+    const params = new URLSearchParams()
+    const hasOnlyBasicParams = 
+      !searchParams.has('from') && 
+      !searchParams.has('to') && 
+      !searchParams.has('advanced_filters') &&
+      !searchParams.has('filter_condition') &&
+      !searchParams.has('profession_id') &&
+      !searchParams.has('funnel_id') &&
+      !searchParams.has('time_from') &&
+      !searchParams.has('time_to');
+    
+    // Se for uma requisição com apenas parâmetros básicos, não aplique nenhum filtro
+    if (hasOnlyBasicParams) {
+      console.log('API: Requisição sem filtros detectada - não aplicando filtros padrão');
+      
+      // Transferir apenas parâmetros básicos
+      if (searchParams.has('page')) params.append('page', searchParams.get('page')!);
+      if (searchParams.has('limit')) params.append('limit', searchParams.get('limit')!);
+      if (searchParams.has('sortBy')) params.append('sortBy', searchParams.get('sortBy')!);
+      if (searchParams.has('sortDirection')) params.append('sortDirection', searchParams.get('sortDirection')!);
+      
+      const paramString = params.toString();
+      // Fazer a requisição para o backend com parâmetros mínimos
+      const response = await axios.get(`${EVENTS_ENDPOINT}?${paramString}`);
+      // Retornar os dados recebidos do backend
+      return NextResponse.json(response.data);
+    }
+    
+    // Caso contrário, continue com o processamento normal dos filtros
     // Verificar especificamente se os filtros avançados existem
     const advancedFilters = searchParams.get('advanced_filters')
     const filterCondition = searchParams.get('filter_condition')
     
     // Criar uma nova instância de URLSearchParams para a requisição ao backend
-    const params = new URLSearchParams()
     
     // Fazer uma cópia dos parâmetros originais para garantir que não são perdidos
     const originalParams = Array.from(searchParams.entries());

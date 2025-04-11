@@ -121,22 +121,185 @@ export const columns: Column[] = [
   },
   {
     header: "País",
-    accessorKey: "user.initialCountry",
+    accessorKey: "initialCountry",
+    defaultVisible: false,
+  },
+  {
+    header: "Código do País",
+    accessorKey: "initialCountryCode",
     defaultVisible: false,
   },
   {
     header: "Estado",
-    accessorKey: "user.initialRegion",
+    accessorKey: "initialRegion",
     defaultVisible: false,
   },
   {
     header: "Cidade",
-    accessorKey: "user.initialCity",
+    accessorKey: "initialCity",
+    defaultVisible: false,
+  },
+  {
+    header: "CEP",
+    accessorKey: "initialZip",
+    defaultVisible: false,
+  },
+  {
+    header: "IP",
+    accessorKey: "initialIp",
     defaultVisible: false,
   },
   {
     header: "Dispositivo",
-    accessorKey: "user.initialDeviceType",
+    accessorKey: "initialDeviceType",
+    defaultVisible: false,
+  },
+  {
+    header: "Duração da Sessão",
+    accessorKey: "session.duration",
+    cell: ({ row }) => {
+      const duration = row.getValue("session.duration");
+      return duration !== undefined ? `${duration}s` : "-";
+    },
+    defaultVisible: false,
+  },
+  {
+    header: "Sessão Ativa",
+    accessorKey: "session.isActive",
+    cell: ({ row }) => {
+      const isActive = row.getValue("session.isActive");
+      return isActive === true ? "Sim" : "Não";
+    },
+    defaultVisible: false,
+  },
+  {
+    header: "Início da Sessão",
+    accessorKey: "session.sessionStart",
+    cell: ({ row }) => {
+      const value = row.getValue("session.sessionStart");
+      if (!value) return '-';
+      try {
+        return format(parseISO(value), "dd/MM/yyyy HH:mm:ss", { locale: ptBR });
+      } catch (e) {
+        return value;
+      }
+    },
+    defaultVisible: false,
+  },
+  {
+    header: "Última Atividade",
+    accessorKey: "session.lastActivity",
+    cell: ({ row }) => {
+      const value = row.getValue("session.lastActivity");
+      if (!value) return '-';
+      try {
+        return format(parseISO(value), "dd/MM/yyyy HH:mm:ss", { locale: ptBR });
+      } catch (e) {
+        return value;
+      }
+    },
+    defaultVisible: false,
+  },
+  {
+    header: "Pesquisa",
+    accessorKey: "survey_name",
+    cell: ({ row }) => {
+      const survey = row.getValue("survey_name")
+      return survey || "-"
+    },
+    defaultVisible: false,
+  },
+  {
+    header: "ID da Pesquisa",
+    accessorKey: "survey.survey_id",
+    defaultVisible: false,
+  },
+  {
+    header: "Faixa",
+    accessorKey: "survey_response.faixa",
+    cell: ({ row }) => {
+      const faixa = row.getValue("survey_response.faixa")
+      return faixa || "-"
+    },
+    defaultVisible: false,
+  },
+  {
+    header: "Pontuação Total",
+    accessorKey: "survey_response.total_score",
+    cell: ({ row }) => {
+      const score = row.getValue("survey_response.total_score")
+      return score !== undefined ? score : "-"
+    },
+    defaultVisible: false,
+  },
+  {
+    header: "Resposta Criada",
+    accessorKey: "survey_response.created_at",
+    cell: ({ row }) => {
+      const value = row.getValue("survey_response.created_at");
+      if (!value) return '-';
+      try {
+        return format(parseISO(value), "dd/MM/yyyy HH:mm", { locale: ptBR });
+      } catch (e) {
+        return value;
+      }
+    },
+    defaultVisible: false,
+  },
+  {
+    header: "Completada",
+    accessorKey: "survey_response.completed",
+    cell: ({ row }) => {
+      const completed = row.getValue("survey_response.completed");
+      return completed === true ? "Sim" : "Não";
+    },
+    defaultVisible: false,
+  },
+  {
+    header: "Pergunta",
+    accessorKey: "survey_response.answers[0].question_text",
+    defaultVisible: false,
+  },
+  {
+    header: "Resposta",
+    accessorKey: "survey_response.answers[0].value",
+    defaultVisible: false,
+  },
+  {
+    header: "Pontuação",
+    accessorKey: "survey_response.answers[0].score",
+    defaultVisible: false,
+  },
+  {
+    header: "Tempo para Responder",
+    accessorKey: "survey_response.answers[0].time_to_answer",
+    cell: ({ row }) => {
+      const time = row.getValue("survey_response.answers[0].time_to_answer");
+      return time !== undefined ? `${time}s` : "-";
+    },
+    defaultVisible: false,
+  },
+  {
+    header: "Alterada",
+    accessorKey: "survey_response.answers[0].changed",
+    cell: ({ row }) => {
+      const changed = row.getValue("survey_response.answers[0].changed");
+      return changed === true ? "Sim" : "Não";
+    },
+    defaultVisible: false,
+  },
+  {
+    header: "Timestamp",
+    accessorKey: "survey_response.answers[0].timestamp",
+    cell: ({ row }) => {
+      const value = row.getValue("survey_response.answers[0].timestamp");
+      if (!value) return '-';
+      try {
+        return format(parseISO(value), "dd/MM/yyyy HH:mm:ss", { locale: ptBR });
+      } catch (e) {
+        return value;
+      }
+    },
     defaultVisible: false,
   }
 ] 

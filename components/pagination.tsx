@@ -42,7 +42,7 @@ export function Pagination({
     
     const pageNumber = parseInt(goToPageValue, 10)
     
-    if (!isNaN(pageNumber) && pageNumber >= 1 && pageNumber <= totalPages) {
+    if (!isNaN(pageNumber) && pageNumber >= 1 && pageNumber <= totalPages && pageNumber !== pageIndex) {
       onPageChange(pageNumber)
     } else {
       setGoToPageValue(String(pageIndex))
@@ -67,7 +67,7 @@ export function Pagination({
           size="icon"
           className="h-8 w-8"
           onClick={() => {
-            if (isLoading) return
+            if (isLoading || pageIndex <= 1) return
             onPageChange(pageIndex - 1)
           }}
           disabled={pageIndex <= 1 || isLoading}
@@ -100,7 +100,7 @@ export function Pagination({
           size="icon"
           className="h-8 w-8"
           onClick={() => {
-            if (isLoading) return
+            if (isLoading || pageIndex >= totalPages) return
             onPageChange(pageIndex + 1)
           }}
           disabled={pageIndex >= totalPages || isLoading}
@@ -117,8 +117,12 @@ export function Pagination({
             variant="ghost"
             size="icon"
             className="h-8 w-8 ml-1"
-            onClick={onRefresh}
+            onClick={() => {
+              if (isLoading) return
+              onRefresh()
+            }}
             disabled={isLoading}
+            title="Atualizar sem mudar de página"
           >
             <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
           </Button>

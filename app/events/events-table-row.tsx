@@ -35,6 +35,86 @@ export function EventsTableRow({
     const keys = key.split('.')
     let value: any = event
     
+    // Check for direct initial* location properties on the event object
+    // These are priorities - preferred access pattern
+    if (['initialCountry', 'initialCity', 'initialRegion', 'initialCountryCode', 'initialZip', 'initialIp'].includes(key)) {
+      // Primary: Direct properties at root level (highest priority)
+      if (key in event && event[key as keyof Event] !== null && event[key as keyof Event] !== undefined && event[key as keyof Event] !== '') {
+        return event[key as keyof Event];
+      }
+      
+      // Secondary: Check if it exists in user object (fallback)
+      const userKey = key;
+      if (event.user && typeof event.user === 'object' && userKey in event.user) {
+        const userValue = event.user[userKey as keyof typeof event.user];
+        if (userValue && userValue !== '') {
+          return userValue;
+        }
+      }
+      
+      // Tertiary: Fallback to session object
+      // Map initialCountry to session.country, etc.
+      const sessionKey = key.replace('initial', '').toLowerCase();
+      if (event.session && typeof event.session === 'object') {
+        // Handle special case for region -> state
+        if (sessionKey === 'region' && event.session.state) {
+          return event.session.state;
+        }
+        
+        if (sessionKey in event.session) {
+          return event.session[sessionKey as keyof typeof event.session];
+        }
+      }
+      
+      return '-';
+    }
+    
+    // Handle the case where fields are still being accessed via user.initialXXX paths
+    if (keys.length === 2 && keys[0] === 'user' && 
+        (keys[1] === 'initialCountry' || keys[1] === 'initialRegion' || 
+         keys[1] === 'initialCity' || keys[1] === 'initialDeviceType' ||
+         keys[1] === 'initialCountryCode' || keys[1] === 'initialZip' || 
+         keys[1] === 'initialIp')) {
+      const property = keys[1];
+      
+      // First check if this property exists at root level
+      if (property in event && event[property as keyof Event] !== null && 
+          event[property as keyof Event] !== undefined && 
+          event[property as keyof Event] !== '') {
+        return event[property as keyof Event];
+      }
+      
+      // Then check in user object
+      if (event.user && typeof event.user === 'object' && property in event.user) {
+        const value = event.user[property as keyof typeof event.user];
+        if (value && value !== '') {
+          return value;
+        }
+      }
+      
+      // Fallback to session for location data (deprecated, will be removed)
+      if (property === 'initialCountry' && event.session?.country) {
+        return event.session.country;
+      }
+      if (property === 'initialRegion' && event.session?.state) {
+        return event.session.state;
+      }
+      if (property === 'initialCity' && event.session?.city) {
+        return event.session.city;
+      }
+      if (property === 'initialCountryCode' && event.session?.country_code) {
+        return event.session.country_code;
+      }
+      if (property === 'initialZip' && event.session?.zip) {
+        return event.session.zip;
+      }
+      if (property === 'initialIp' && event.session?.ip) {
+        return event.session.ip;
+      }
+      
+      return '-';
+    }
+    
     // Check for direct camelCase UTM properties on the event object
     // These are priorities - preferred access pattern
     if (['utmSource', 'utmMedium', 'utmCampaign', 'utmContent', 'utmTerm'].includes(key)) {
@@ -64,34 +144,6 @@ export function EventsTableRow({
       // Quaternary: Session object
       if (event.session && typeof event.session === 'object' && snakeKey in event.session) {
         return event.session[snakeKey as keyof typeof event.session];
-      }
-      
-      return '-';
-    }
-    
-    // Handle location and device properties from user
-    if (keys.length === 2 && keys[0] === 'user' && 
-        (keys[1] === 'initialCountry' || keys[1] === 'initialRegion' || 
-         keys[1] === 'initialCity' || keys[1] === 'initialDeviceType')) {
-      const property = keys[1];
-      
-      // Direct access from user object
-      if (event.user && typeof event.user === 'object' && property in event.user) {
-        const value = event.user[property as keyof typeof event.user];
-        if (value && value !== '') {
-          return value;
-        }
-      }
-      
-      // Fallback to session for location data
-      if (property === 'initialCountry' && event.session?.country) {
-        return event.session.country;
-      }
-      if (property === 'initialRegion' && event.session?.state) {
-        return event.session.state;
-      }
-      if (property === 'initialCity' && event.session?.city) {
-        return event.session.city;
       }
       
       return '-';

@@ -1177,9 +1177,9 @@ export function EventsTable({
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {Array.isArray(events) && events.map((event: Event) => (
+                  {Array.isArray(events) && events.map((event: Event, index: number) => (
                     <EventsTableRow 
-                      key={event.event_id}
+                      key={`${event.event_id}-${index}`}
                       event={event} 
                       visibleColumns={columnsData.map(col => col.accessorKey as EventColumnId)}
                       isSelected={!!selectedRows[event.event_id]}

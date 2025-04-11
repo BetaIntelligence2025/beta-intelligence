@@ -10,12 +10,20 @@ export interface Event {
   funnel_id: number;
   event_source: string;
   event_type: string;
+  // Direct location properties
+  initialCountry?: string;
+  initialRegion?: string;
+  initialCity?: string;
+  initialDeviceType?: string;
+  initialCountryCode?: string;
+  initialZip?: string;
+  initialIp?: string;
   user: {
     fullname: string;
     email: string;
     phone: string;
     isClient: boolean;
-    initialDeviceType: string;
+    initialDeviceType?: string;
     initialUtmSource?: string;
     initialUtmMedium?: string;
     initialUtmCampaign?: string;
@@ -24,6 +32,9 @@ export interface Event {
     initialCountry?: string;
     initialRegion?: string;
     initialCity?: string;
+    initialCountryCode?: string;
+    initialZip?: string;
+    initialIp?: string;
   };
   profession: {
     profession_name: string;
@@ -44,6 +55,20 @@ export interface Event {
     country: string;
     state: string;
     city: string;
+    country_code?: string;
+    zip?: string;
+    ip?: string;
+    // Additional session fields from API response
+    session_id?: string;
+    isActive?: boolean;
+    sessionStart?: string;
+    lastActivity?: string;
+    utmSource?: string;
+    utmMedium?: string;
+    utmCampaign?: string;
+    utmContent?: string;
+    utmTerm?: string;
+    duration?: number;
   };
   // Direct UTM properties
   utmSource?: string;
@@ -67,6 +92,10 @@ export interface Event {
     utm_content: string;
     utm_term: string;
   };
+  // Survey data direct on event object
+  survey_name?: string;
+  survey?: Survey;
+  survey_response?: SurveyResponse;
 }
 
 export interface FetchEventsResponse {
@@ -88,4 +117,40 @@ export interface EventsTableProps {
   currentPage: number;
   sortColumn: string | null;
   sortDirection: 'asc' | 'desc' | null;
+}
+
+// Enumeração para o campo "faixa"
+export type SurveyFaixa = "A" | "B" | "C";
+
+export interface Survey {
+  survey_id: number;  // INT8 no banco, number no TypeScript
+  survey_name: string;
+  funnel_id: number;
+  created_at: string;
+  updated_at: string;
+  responses?: SurveyResponse[];
+}
+
+export interface SurveyResponse {
+  id: string;  // UUID
+  survey_id: number;
+  event_id: string;  // UUID
+  total_score: number;
+  completed: boolean;
+  created_at: string;
+  faixa: SurveyFaixa;
+  survey?: Survey;
+  answers: SurveyAnswer[];
+}
+
+export interface SurveyAnswer {
+  id: string;  // UUID
+  survey_response_id: string;  // UUID
+  question_id: string;
+  question_text: string;
+  value: string;
+  score: number;
+  time_to_answer: number;
+  changed: boolean;
+  timestamp: string;
 } 

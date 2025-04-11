@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useMemo } from "react"
 import { Search, Filter, X, ChevronLeft, Calendar, SlidersHorizontal, Plus, Trash2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -151,6 +151,61 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
   
   // Add ref to prevent loops
   const isUpdatingRef = useRef(false);
+  
+  // Novo efeito para sincronizar estado visual com filtros da URL e abrir se necessário
+  useEffect(() => {
+    // Evite executar se estamos atualizando a URL
+    if (isUpdatingRef.current || isUpdatingDirectly) return;
+    
+    try {
+      // Verificar se há filtros avançados na URL
+      const advancedFiltersParam = searchParams.get('advanced_filters');
+      if (advancedFiltersParam) {
+        const parsedFilters = JSON.parse(advancedFiltersParam);
+        
+        // Verificar se os filtros são válidos e contêm valores
+        const hasRealFilters = Array.isArray(parsedFilters) && 
+                              parsedFilters.length > 0 &&
+                              parsedFilters.some(f => f.value && f.value.trim() !== '');
+                              
+        if (hasRealFilters) {
+          console.log('🔍 Found active advanced filters in URL:', 
+                      parsedFilters.filter(f => f.value && f.value.trim() !== '').length);
+          
+          // Verificar se há diferença entre o estado atual e os filtros na URL
+          const currentFilterValues = JSON.stringify(advancedFilters);
+          const urlFilterValues = JSON.stringify(parsedFilters);
+          
+          if (currentFilterValues !== urlFilterValues) {
+            console.log('Updating filters UI state to match URL');
+            
+            // Atualizar estado dos filtros avançados
+            setAdvancedFilters(parsedFilters);
+            
+            // Atualizar também os filtros pendentes (usados no modal de edição)
+            setPendingAdvancedFilters(parsedFilters);
+            
+            // Verificar se há condição de filtro
+            const filterConditionParam = searchParams.get('filter_condition') as 'AND' | 'OR';
+            if (filterConditionParam) {
+              setFilterCondition(filterConditionParam);
+              setPendingFilterCondition(filterConditionParam);
+            }
+            
+            // Opcional: Se for a primeira vez que detectamos filtros, mostrar o modal
+            const isFirstNavigation = sessionStorage.getItem('advanced_filters_shown') !== 'true';
+            if (isFirstNavigation) {
+              sessionStorage.setItem('advanced_filters_shown', 'true');
+              // Descomentar esta linha para abrir o modal automaticamente na primeira vez
+              // setAdvancedFilterOpen(true);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error synchronizing advanced filters from URL:', error);
+    }
+  }, [searchParams, isUpdatingDirectly, advancedFilters]);
   
   // Helper function to get current filters from URL
   const getFiltersFromUrl = () => {
@@ -840,7 +895,7 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
   };
 
   const handleClearFilters = () => {
-    // Reset all filter states
+    // Reset all filter states locally
     setProfessionIds([]);
     setFunnelIds([]);
     setDateRange(undefined);
@@ -849,58 +904,94 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
     setPendingAdvancedFilters([{ id: '1', property: 'user.fullname', operator: 'equals', value: '' }]);
     setPendingFilterCondition('AND');
     
-    // Fetch today's date for default filter
-    const today = new Date();
-    const brazilianToday = toBrazilianTime(today);
-    const startOfDay = getBrazilianStartOfDay(brazilianToday);
-    const endOfDay = getBrazilianEndOfDay(brazilianToday);
+    // Close any open filter popups
+    setAdvancedFilterOpen(false);
+    setActiveFilter("main");
     
-    // Clear URL parameters except for date range (set to today)
-    const params = new URLSearchParams();
-    params.set('from', startOfDay);
-    params.set('to', endOfDay);
-    params.set('page', '1');
-    
-    // Store in session storage to persist across page refreshes
-    sessionStorage.setItem('events_default_filter_applied', 'true');
-    sessionStorage.setItem('events_from_date', startOfDay);
-    sessionStorage.setItem('events_to_date', endOfDay);
-    
-    // Remove other filter params from session storage
-    sessionStorage.removeItem('events_time_from');
-    sessionStorage.removeItem('events_time_to');
-    
-    // Definir flag para evitar atualizações recursivas
+    // Set updating flag to prevent recursive updates
     setIsUpdatingDirectly(true);
     
-    // Update URL
-    router.push(`/events?${params.toString()}`, { scroll: false });
+    console.log("COMPLETELY REMOVING ALL FILTERS");
     
-    // Resetar a flag após um pequeno delay para garantir que a URL foi atualizada
-    setTimeout(() => {
+    try {
+      // Set a special flag to signal that we're clearing filters
+      // This will be detected by the fetchEvents function
+      sessionStorage.setItem('filter_clearing_in_progress', 'true');
+      
+      // Set a special flag to indicate intentional removal of advanced filters
+      sessionStorage.setItem('advanced_filters_removed', 'true');
+      
+      // Extract only the non-filter parameters that should be preserved
+      const sortBy = searchParams.get('sortBy');
+      const sortDirection = searchParams.get('sortDirection');
+      const limit = searchParams.get('limit');
+      
+      // Create absolutely minimal URL parameters
+      const cleanParams = new URLSearchParams();
+      
+      // Add only pagination and sorting parameters - NO DATE FILTERS
+      cleanParams.set('page', '1');
+      
+      // Only add preserved params if they exist
+      if (sortBy) cleanParams.set('sortBy', sortBy);
+      if (sortDirection) cleanParams.set('sortDirection', sortDirection);
+      if (limit) cleanParams.set('limit', limit);
+      
+      // Create a clean URL with minimal parameters
+      const cleanUrl = `/events?${cleanParams.toString()}`;
+      
+      // Update the URL immediately - use both methods for immediate visual feedback
+      window.history.replaceState({}, '', cleanUrl);
+      router.replace(cleanUrl, { scroll: false });
+      
+      // Remove ALL filter-related items from session storage
+      sessionStorage.removeItem('events_default_filter_applied');
+      sessionStorage.removeItem('events_from_date');
+      sessionStorage.removeItem('events_to_date');
+      sessionStorage.removeItem('events_time_from');
+      sessionStorage.removeItem('events_time_to');
+      sessionStorage.removeItem('events_filter_condition');
+      sessionStorage.removeItem('events_advanced_filters');
+      
+      // Notify parent about filter changes - removing ALL filters
+      if (onFilterChange) {
+        onFilterChange({
+          professionId: null,
+          funnelId: null,
+          dateFrom: null,
+          dateTo: null,
+          timeFrom: null,
+          timeTo: null,
+          advancedFilters: [],
+          filterCondition: 'AND'
+        });
+      }
+      
+      // Immediately dispatch the filters-cleared event to show loading state
+      window.dispatchEvent(new CustomEvent('filters-cleared'));
+      
+      // Reset updating flag after a delay
+      setTimeout(() => {
+        setIsUpdatingDirectly(false);
+      }, 500);
+      
+      // Manter a flag advanced_filters_removed por um tempo para evitar restauração imediata
+      setTimeout(() => {
+        sessionStorage.removeItem('advanced_filters_removed');
+      }, 5000); // Manter a flag por 5 segundos após a limpeza
+    } catch (error) {
+      console.error("Error while clearing filters:", error);
+      // Reset updating flag in case of error
       setIsUpdatingDirectly(false);
-    }, 100);
-    
-    // Notificar mudança de filtros se callback existir
-    if (onFilterChange) {
-      onFilterChange({
-        professionId: null,
-        funnelId: null,
-        dateFrom: startOfDay,
-        dateTo: endOfDay,
-        timeFrom: null,
-        timeTo: null,
-        advancedFilters: [],
-        filterCondition: 'AND'
-      });
+      // Clear flag even on error
+      sessionStorage.removeItem('filter_clearing_in_progress');
     }
   };
 
-  const getFilterButtonText = () => {
-    if (professionIds.length === 0 && funnelIds.length === 0) {
-      return "Filtros avançados"
-    } 
-  }
+  // Criar um contador para filtros ativos que podemos usar em vários lugares
+  const activeAdvancedFiltersCount = useMemo(() => {
+    return advancedFilters.filter(f => f.value && f.value.trim() !== '').length;
+  }, [advancedFilters]);
 
   const renderFilterContent = () => {
     if (activeFilter === "main") {
@@ -1096,6 +1187,21 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
                           <SelectItem value="PESQUISA_LEAD">PESQUISA_LEAD</SelectItem>
                         </SelectContent>
                       </Select>
+                    ) : filter.property === "initialDeviceType" ? (
+                      <Select
+                        value={filter.value}
+                        onValueChange={(value) => handleAdvancedFilterChange(index, 'value', value)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione um Dispositivo" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="desktop">Desktop</SelectItem>
+                          <SelectItem value="mobile">Mobile</SelectItem>
+                          <SelectItem value="tablet">Tablet</SelectItem>
+                          <SelectItem value="other">Outro</SelectItem>
+                        </SelectContent>
+                      </Select>
                     ) : (
                       <div className="relative">
                         <Input
@@ -1187,9 +1293,9 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
         variant="outline"
         size="sm"
         className={cn(
-          "h-9 flex whitespace-nowrap",
-          (professionIds.length > 0 || funnelIds.length > 0 || advancedFilters.some(f => f.value.trim() !== '')) && 
-          "bg-blue-50 border-blue-300 hover:bg-blue-100 hover:border-blue-400"
+          "h-9 flex whitespace-nowrap relative",
+          activeAdvancedFiltersCount > 0 && 
+          "bg-blue-50 border-blue-400 hover:bg-blue-100 text-blue-600 font-medium"
         )}
         onClick={() => {
           setPendingAdvancedFilters([...advancedFilters]);
@@ -1197,11 +1303,12 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
           setAdvancedFilterOpen(true);
         }}
       >
-        <Filter className="h-3.5 w-3.5 mr-2" />
+        <Filter className={cn("h-3.5 w-3.5 mr-2", 
+                            activeAdvancedFiltersCount > 0 && "text-blue-600")} />
         Filtros avançados
-        {advancedFilters.some(f => f.value.trim() !== '') && (
-          <Badge variant="secondary" className="ml-2">
-            {advancedFilters.filter(f => f.value.trim() !== '').length}
+        {activeAdvancedFiltersCount > 0 && (
+          <Badge variant="secondary" className="ml-2 bg-blue-600 text-white">
+            {activeAdvancedFiltersCount}
           </Badge>
         )}
       </Button>
@@ -1387,6 +1494,21 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
                           <SelectItem value="PURCHASE">PURCHASE</SelectItem>
                           <SelectItem value="PAGEVIEW">PAGEVIEW</SelectItem>
                           <SelectItem value="PESQUISA_LEAD">PESQUISA_LEAD</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : filter.property === "initialDeviceType" ? (
+                      <Select
+                        value={filter.value}
+                        onValueChange={(value) => handleAdvancedFilterChange(index, 'value', value)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione um Dispositivo" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="desktop">Desktop</SelectItem>
+                          <SelectItem value="mobile">Mobile</SelectItem>
+                          <SelectItem value="tablet">Tablet</SelectItem>
+                          <SelectItem value="other">Outro</SelectItem>
                         </SelectContent>
                       </Select>
                     ) : (

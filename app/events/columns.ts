@@ -73,7 +73,7 @@ export const columns: Column[] = [
       const isClient = row.getValue("user.isClient")
       if (isClient === true) {
         return "Sim"
-      }else {
+      } else {
         return "Não"
       }
     }
@@ -96,42 +96,42 @@ export const columns: Column[] = [
   },
   {
     header: "UTM Source",
-    accessorKey: "session.utm_source",
+    accessorKey: "utmSource",
     defaultVisible: false,
   },
   {
     header: "UTM Medium",
-    accessorKey: "session.utm_medium",
+    accessorKey: "utmMedium",
     defaultVisible: false,
   },
   {
     header: "UTM Campaign",
-    accessorKey: "session.utm_campaign",
+    accessorKey: "utmCampaign",
     defaultVisible: false,
   },
   {
     header: "UTM Content",
-    accessorKey: "session.utm_content",
+    accessorKey: "utmContent",
     defaultVisible: false,
   },
   {
     header: "UTM Term",
-    accessorKey: "session.utm_term",
+    accessorKey: "utmTerm",
     defaultVisible: false,
   },
   {
     header: "País",
-    accessorKey: "session.country",
+    accessorKey: "user.initialCountry",
     defaultVisible: false,
   },
   {
     header: "Estado",
-    accessorKey: "session.state",
+    accessorKey: "user.initialRegion",
     defaultVisible: false,
   },
   {
     header: "Cidade",
-    accessorKey: "session.city",
+    accessorKey: "user.initialCity",
     defaultVisible: false,
   },
   {

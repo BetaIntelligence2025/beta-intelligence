@@ -150,25 +150,25 @@ const MemoizedChart = memo(function Chart({
 // Export the main component with performance optimizations
 export default function VisualizationByPeriod(props: VisualizationByPeriodProps) {
   const { 
-    title = "Dados", 
+    title = "Visualização por Período", 
     dateRange, 
     selectedCard,
     dashboardData
   } = props;
   
-  // Create a unique key for forcing re-renders when needed
-  const [key, setKey] = useState(Date.now());
-  
+  // Remove the key-based render forcing that was causing issues
   const [timeFrame, setTimeFrame] = useState<TimeFrame>("Daily");
   const [isLoading, setIsLoading] = useState(true);
   const [periodData, setPeriodData] = useState<DashboardDataItem[]>([]);
   const [chartData, setChartData] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
   
-  // Use a ref to track if component is mounted to prevent updates on unmounted component
+  // Explicitly set isMounted to true on initialization
   const isMounted = useRef(true);
   
   useEffect(() => {
+    // Ensure it's set to true at the start
+    isMounted.current = true;
     return () => {
       isMounted.current = false;
     };
@@ -176,47 +176,41 @@ export default function VisualizationByPeriod(props: VisualizationByPeriodProps)
   
   // Helper function to format dates for API consistently
   const formatDateForApi = useCallback((date: Date, isEndDate = false): string => {
-    // Get the date in local timezone to avoid UTC conversion issues
-    const localDate = new Date(date);
+    // Get the date in Brazil timezone (UTC-3)
+    const brazilDate = new Date(date.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
     
     // Extract date parts
-    const year = localDate.getFullYear();
-    const month = String(localDate.getMonth() + 1).padStart(2, '0');
-    const day = String(localDate.getDate()).padStart(2, '0');
+    const year = brazilDate.getFullYear();
+    const month = String(brazilDate.getMonth() + 1).padStart(2, '0');
+    const day = String(brazilDate.getDate()).padStart(2, '0');
     
-    // Return in the format YYYY-MM-DDT00:00:00Z or YYYY-MM-DDT23:59:59Z for end dates
-    const timeComponent = isEndDate ? 'T23:59:59Z' : 'T00:00:00Z';
+    // Return in the format YYYY-MM-DDT00:00:00-03:00 or YYYY-MM-DDT23:59:59-03:00 for end dates
+    const timeComponent = isEndDate ? 'T23:59:59-03:00' : 'T00:00:00-03:00';
     
     const formattedDate = `${year}-${month}-${day}${timeComponent}`;
     
     return formattedDate;
   }, []);
   
-  // Memoize the date range para período padrão de 26 de fevereiro até 27 de março
+  // Memoize the date range para período padrão com valores atualizados
   const defaultDateRange = useMemo(() => {
-    // Em ambiente de desenvolvimento, usar período fixo
-    if (process.env.NODE_ENV === 'development') {
-      const startDate = new Date('2025-02-26T00:00:00Z');
-      const endDate = new Date('2025-03-27T23:59:59Z');
-      
-      // Calcular o número de dias
-      const diffDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
-      
-      return {
-        from: formatDateForApi(startDate),
-        to: formatDateForApi(endDate, true)
-      };
-    } else {
-      // Em produção, usar últimos 30 dias
-      const today = new Date();
-      const startDate = new Date(today);
-      startDate.setDate(today.getDate() - 30);
-      
-      return {
-        from: formatDateForApi(startDate),
-        to: formatDateForApi(today, true)
-      };
-    }
+    // Em ambiente de desenvolvimento e produção, usar data de hoje no horário de Brasília
+    const today = new Date();
+    // Converter para horário de Brasília
+    const todayBrazil = new Date(today.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+    
+    // Para a data início, usar hoje às 00:00:00
+    const startDate = new Date(todayBrazil);
+    startDate.setHours(0, 0, 0, 0);
+    
+    // Para a data fim, usar hoje às 23:59:59
+    const endDate = new Date(todayBrazil);
+    endDate.setHours(23, 59, 59, 999);
+    
+    return {
+      from: formatDateForApi(startDate),
+      to: formatDateForApi(endDate, true)
+    };
   }, [formatDateForApi]);
   
   // Use the user-provided date range if available, otherwise use default range
@@ -258,34 +252,42 @@ export default function VisualizationByPeriod(props: VisualizationByPeriodProps)
     return [cardType];
   }, [selectedCard]);
   
-  // Handler for timeframe changes with no memoization to avoid stale closures
+  // Handler for timeframe changes without forcing full re-render
   function handleTimeFrameChange(value: string) {
-    // Force a complete rerender by updating the key
-    setKey(Date.now());
-    
-    // Set the new timeframe
     setTimeFrame(value as TimeFrame);
-    
-    // Reset any errors
     setError(null);
-    
-    // Show loading state immediately
-    setIsLoading(true);
   }
   
-  // Process data based on timeFrame when data changes
+  // First effect to handle dashboardData updates
   useEffect(() => {
-    let isCancelled = false;
+    if (!dashboardData) return;
     
-    async function processData() {
-      if (!periodData || periodData.length === 0 || !isMounted.current) {
-        setChartData([]);
-        setIsLoading(false);
-        return;
+    // Update period data when dashboardData changes
+    if (dashboardData.isLoading) {
+      setIsLoading(true);
+    } else {
+      setPeriodData(dashboardData.data || []);
+      if (dashboardData.errors) {
+        setError(dashboardData.errors);
       }
-      
+    }
+  }, [dashboardData]);
+  
+  // Separate effect to process data when periodData or timeFrame changes
+  useEffect(() => {
+    if (!periodData || periodData.length === 0) {
+      setChartData([]);
+      setIsLoading(false);
+      return;
+    }
+    
+    let isCancelled = false;
+    setIsLoading(true);
+    
+    async function processChartData() {
       try {
-        // Use API endpoint instead of direct server action
+        console.log('Processing chart data with timeframe:', timeFrame);
+        
         const response = await fetch('/api/dashboard/process', {
           method: 'POST',
           headers: {
@@ -310,11 +312,12 @@ export default function VisualizationByPeriod(props: VisualizationByPeriodProps)
         const processedData = await response.json();
         
         if (!isCancelled && isMounted.current) {
+          console.log('Setting chart data:', processedData.length, 'items');
           setChartData(processedData);
           setIsLoading(false);
         }
       } catch (error) {
-        console.error('Error processing data:', error);
+        console.error('Error processing chart data:', error);
         if (!isCancelled && isMounted.current) {
           setError(error instanceof Error ? error.message : 'Error processing data');
           setIsLoading(false);
@@ -322,99 +325,42 @@ export default function VisualizationByPeriod(props: VisualizationByPeriodProps)
       }
     }
     
-    processData();
+    processChartData();
     
     return () => {
       isCancelled = true;
     };
-  }, [periodData, timeFrame, dateRange, effectiveDateRange]);
+  }, [periodData, timeFrame, dateRange]);
   
-  // Fetch data using API endpoint when dependencies change
+  // Only fetch data directly if dashboardData is not provided
   useEffect(() => {
+    if (dashboardData) return; // Skip if dashboardData is provided
+    
     let isCancelled = false;
+    setIsLoading(true);
     
     async function fetchData() {
-      if (!isMounted.current) return;
-      
-      // Se dashboardData está disponível, use-o em vez de fazer sua própria chamada
-      if (dashboardData) {
-        if (!isCancelled && isMounted.current) {
-          // Se dashboardData está carregando, atualizar o estado para mostrar loading
-          if (dashboardData.isLoading) {
-            setIsLoading(true);
-            return;
-          }
-          
-          // Se dashboardData está disponível, use-o
-          setPeriodData(dashboardData.data);
-          setIsLoading(false);
-          
-          // Verificar se há erros
-          if (dashboardData.errors) {
-            setError(dashboardData.errors);
-          }
-        }
-        return;
-      }
-      
-      // Fallback para buscar dados diretamente se dashboardData não estiver disponível
-      setIsLoading(true);
-      setError(null);
-      
       try {
-        // Convert selectedCard to string | undefined to match parameter type
-        const cardTypeParam = selectedCard === null ? undefined : selectedCard;
-        
-        // Build the URL with query parameters
         const params = new URLSearchParams();
-        params.append('timeFrame', timeFrame);
+        if (dateRange?.from) params.append('from', dateRange.from.toISOString());
+        if (dateRange?.to) params.append('to', dateRange.to.toISOString());
+        if (selectedCard) params.append('cardType', selectedCard);
         
-        if (cardTypeParam) {
-          params.append('cardType', cardTypeParam);
-        }
-        
-        // If dateRange is provided, add the date parameters
-        if (dateRange) {
-          params.append('from', effectiveDateRange.from);
-          params.append('to', effectiveDateRange.to);
-        }
-        
-        // Add a cache-busting parameter
-        params.append('_t', Date.now().toString());
-        
-        // Use API endpoint instead of server action
-        const url = `/api/dashboard/data?${params.toString()}`;
-        
-        const response = await fetch(url, {
-          headers: {
-            'Accept': 'application/json',
-            'Cache-Control': 'no-cache, no-store, must-revalidate',
-            'Pragma': 'no-cache'
-          },
-          cache: 'no-store',
-          // Add a cache-busting parameter to avoid cache when timeframe changes
-          next: { revalidate: 0 }
-        });
+        const response = await fetch(`/api/dashboard/data?${params.toString()}`);
         
         if (!response.ok) {
           throw new Error(`API responded with status ${response.status}`);
         }
         
-        const result = await response.json();
+        const data = await response.json();
         
         if (!isCancelled && isMounted.current) {
-          setPeriodData(result.data);
-          
-          // Check for errors from the API
-          if (result.errors) {
-            setError(result.errors);
-            setIsLoading(false);
-          }
+          setPeriodData(data.data || []);
         }
       } catch (error) {
+        console.error('Error fetching data:', error);
         if (!isCancelled && isMounted.current) {
-          console.error('Error fetching dashboard data:', error);
-          setError(error instanceof Error ? error.message : 'Erro desconhecido');
+          setError(error instanceof Error ? error.message : 'Error fetching data');
           setIsLoading(false);
         }
       }
@@ -425,7 +371,7 @@ export default function VisualizationByPeriod(props: VisualizationByPeriodProps)
     return () => {
       isCancelled = true;
     };
-  }, [timeFrame, dateRange, selectedCard, effectiveDateRange, dashboardData]);
+  }, [dateRange, selectedCard, dashboardData]);
   
   // Create the appropriate display value for the selected timeframe
   const timeFrameDisplay = {
@@ -435,9 +381,9 @@ export default function VisualizationByPeriod(props: VisualizationByPeriodProps)
     "Yearly": "Anual"
   }[timeFrame];
   
-  // Force the component to re-render with the key
+  // Return the component without the key-based rerender
   return (
-    <div key={key}>
+    <div>
       {isLoading ? (
         <Card className="col-span-4">
           <CardHeader className="relative">

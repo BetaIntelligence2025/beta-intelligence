@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import axios from 'axios'
 import { API_ENDPOINTS } from '@/app/config/api'
+import { 
+  toBrazilianTime, 
+  formatBrazilianDate, 
+  getBrazilianStartOfDay, 
+  getBrazilianEndOfDay, 
+  BRAZIL_TIMEZONE 
+} from '@/lib/date-utils'
 
 // Usar a configuração centralizada de API
 const EVENTS_ENDPOINT = API_ENDPOINTS.EVENTS
@@ -69,7 +76,6 @@ export async function GET(request: NextRequest) {
     
     // Fazer a requisição para o backend
     const response = await axios.get(`${EVENTS_ENDPOINT}?${paramString}`)
-    
     
     // Retornar os dados recebidos do backend
     return NextResponse.json(response.data)

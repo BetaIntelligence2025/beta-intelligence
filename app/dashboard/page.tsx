@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import SummaryCards from '@/components/dashboard/summary-cards';
 import VisualizationByPeriod from './visualization-client';
@@ -59,6 +59,47 @@ export default function Dashboard() {
       setActiveTab(urlTab);
     }
   }, [urlTab, activeTab]);
+  
+  // Efeito para inicializar os parâmetros de data se não existirem (com flag para evitar múltiplas execuções)
+  const initialUrlSetupRef = useRef(false);
+  
+  useEffect(() => {
+    // Evitar execução múltipla
+    if (initialUrlSetupRef.current) return;
+    initialUrlSetupRef.current = true;
+    
+    // Verificar se já existe filtro de data na URL
+    const fromParam = searchParams.get('from');
+    const toParam = searchParams.get('to');
+    
+    // Se não tiver datas na URL, adicionar a data atual no horário de Brasília
+    if (!fromParam || !toParam) {
+      const today = new Date();
+      // Converter para horário de Brasília
+      const brazilDate = new Date(today.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+      
+      // Formatar as datas no formato esperado pela API
+      const year = brazilDate.getFullYear();
+      const month = String(brazilDate.getMonth() + 1).padStart(2, '0');
+      const day = String(brazilDate.getDate()).padStart(2, '0');
+      
+      const fromDate = `${year}-${month}-${day}T00:00:00-03:00`;
+      const toDate = `${year}-${month}-${day}T23:59:59-03:00`;
+      
+      // Criar novos parâmetros mantendo os existentes
+      const params = new URLSearchParams(searchParams.toString());
+      params.set('from', fromDate);
+      params.set('to', toDate);
+      
+      // Atualizar URL sem recarregar a página, usando replace em vez de push para não adicionar ao histórico
+      console.log('Inicializando dashboard com data atual:', { fromDate, toDate });
+      
+      // Usar setTimeout para garantir que a atualização da URL aconteça após a renderização inicial
+      setTimeout(() => {
+        router.replace(`/dashboard?${params.toString()}`, { scroll: false });
+      }, 0);
+    }
+  }, []); // Sem dependências para executar apenas uma vez
   
   // Função para atualizar os dados
   async function refreshData() {

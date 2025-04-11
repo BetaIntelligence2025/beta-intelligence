@@ -27,8 +27,8 @@ export function DateFilterButton({ onChange }: DateFilterButtonProps) {
   const pathname = usePathname();
   const router = useRouter();
   
-  // Parse the date from URL parameters
-  const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
+  // Função para converter string da URL em objeto de data
+  function parseDateFromUrl() {
     const from = searchParams.get('from');
     const to = searchParams.get('to');
     const timeFrom = searchParams.get('time_from');
@@ -61,7 +61,30 @@ export function DateFilterButton({ onChange }: DateFilterButtonProps) {
       }
     }
     return undefined;
-  });
+  }
+  
+  // Parse the date from URL parameters ao inicializar
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(parseDateFromUrl());
+
+  // Sincronizar o componente quando os parâmetros da URL mudarem
+  useEffect(() => {
+    const newDateRange = parseDateFromUrl();
+    
+    // Comparar se o novo range é diferente do atual para evitar loops
+    const currentFromDate = dateRange?.from?.toISOString();
+    const currentToDate = dateRange?.to?.toISOString();
+    const newFromDate = newDateRange?.from?.toISOString();
+    const newToDate = newDateRange?.to?.toISOString();
+    
+    if (
+      newFromDate !== currentFromDate || 
+      newToDate !== currentToDate ||
+      newDateRange?.fromTime !== dateRange?.fromTime ||
+      newDateRange?.toTime !== dateRange?.toTime
+    ) {
+      setDateRange(newDateRange);
+    }
+  }, [searchParams]);
 
   // Use effect to notify parent component of date changes
   useEffect(() => {
@@ -78,20 +101,20 @@ export function DateFilterButton({ onChange }: DateFilterButtonProps) {
     const params = new URLSearchParams(searchParams.toString());
     
     if (newDateRange.from) {
-      // Format start date as YYYY-MM-DDT00:00:00Z
+      // Format start date no fuso horário de Brasília (-03:00)
       const fromYear = newDateRange.from.getFullYear();
       const fromMonth = String(newDateRange.from.getMonth() + 1).padStart(2, '0');
       const fromDay = String(newDateRange.from.getDate()).padStart(2, '0');
-      const fromDate = `${fromYear}-${fromMonth}-${fromDay}T00:00:00Z`;
+      const fromDate = `${fromYear}-${fromMonth}-${fromDay}T00:00:00-03:00`;
       
       params.set('from', fromDate);
       
       if (newDateRange.to) {
-        // Format end date as YYYY-MM-DDT23:59:59Z to include the entire day
+        // Format end date no fuso horário de Brasília (-03:00)
         const toYear = newDateRange.to.getFullYear();
         const toMonth = String(newDateRange.to.getMonth() + 1).padStart(2, '0');
         const toDay = String(newDateRange.to.getDate()).padStart(2, '0');
-        const toDate = `${toYear}-${toMonth}-${toDay}T23:59:59Z`;
+        const toDate = `${toYear}-${toMonth}-${toDay}T23:59:59-03:00`;
         
         params.set('to', toDate);
       } else {

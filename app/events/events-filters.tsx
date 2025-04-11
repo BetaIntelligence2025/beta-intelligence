@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Search, Filter, X, ChevronLeft, Calendar, SlidersHorizontal, Plus, Trash2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -36,6 +36,13 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog"
+import { 
+  toBrazilianTime, 
+  formatBrazilianDate, 
+  getBrazilianStartOfDay, 
+  getBrazilianEndOfDay, 
+  BRAZIL_TIMEZONE 
+} from "@/lib/date-utils"
 
 interface AdvancedFilter {
   id: string;
@@ -95,13 +102,37 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
     fromTime?: string;
     toTime?: string;
   } | undefined>(() => {
-    if (!initialFilters?.dateFrom) return undefined;
-    return {
-      from: new Date(initialFilters.dateFrom),
-      to: initialFilters.dateTo ? new Date(initialFilters.dateTo) : undefined,
-      fromTime: initialFilters.timeFrom,
-      toTime: initialFilters.timeTo
-    };
+    try {
+      // Check if we have filter data
+      if (initialFilters?.dateFrom) {
+        return {
+          from: new Date(initialFilters.dateFrom),
+          to: initialFilters.dateTo ? new Date(initialFilters.dateTo) : undefined,
+          fromTime: initialFilters.timeFrom,
+          toTime: initialFilters.timeTo
+        };
+      }
+      
+      // Get from URL if available
+      const fromParam = searchParams.get('from');
+      const toParam = searchParams.get('to');
+      const fromTimeParam = searchParams.get('time_from');
+      const toTimeParam = searchParams.get('time_to');
+      
+      if (fromParam) {
+        return {
+          from: new Date(fromParam),
+          to: toParam ? new Date(toParam) : undefined,
+          fromTime: fromTimeParam || undefined,
+          toTime: toTimeParam || undefined
+        };
+      }
+      
+      return undefined;
+    } catch (error) {
+      console.error("Error parsing date range:", error);
+      return undefined;
+    }
   });
 
   const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilter[]>([
@@ -118,6 +149,9 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
   const [isUpdatingFromUrl, setIsUpdatingFromUrl] = useState(false);
   const [isUpdatingDirectly, setIsUpdatingDirectly] = useState(false);
   
+  // Add ref to prevent loops
+  const isUpdatingRef = useRef(false);
+  
   // Helper function to get current filters from URL
   const getFiltersFromUrl = () => {
     return {
@@ -128,10 +162,86 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
   
   // Inicializar os estados a partir da URL na primeira montagem
   useEffect(() => {
-    // Se temos initialFilters, eles têm prioridade
-    if (Object.keys(initialFilters).length > 0) return;
+    // Avoid any updates when this effect runs
+    setIsUpdatingDirectly(true);
+    isUpdatingRef.current = true;
     
-    // Carregar da URL
+    // Check if initialFilters were provided
+    const hasInitialFilters = Object.keys(initialFilters).length > 0;
+    
+    // Check if there are any URL parameters that indicate existing filters
+    const hasExistingFilters = searchParams.toString() !== "";
+    
+    // Auto-apply current day filter on first component mount if no date filter is set
+    // BUT only if there are no existing filters of any kind
+    const fromParam = searchParams.get('from');
+    const toParam = searchParams.get('to');
+    
+    if (!fromParam && !toParam && !hasInitialFilters && !hasExistingFilters) {
+      console.log("Auto-applying current day filter on component mount");
+      
+      // Get today's date in Brazilian timezone
+      const today = new Date();
+      const brazilianToday = toBrazilianTime(today);
+      const startOfDay = getBrazilianStartOfDay(brazilianToday);
+      const endOfDay = getBrazilianEndOfDay(brazilianToday);
+      
+      // Set date range in component state
+      setDateRange({
+        from: brazilianToday,
+        to: brazilianToday
+      });
+      
+      // Update filters with current day
+      if (onFilterChange) {
+        onFilterChange({
+          ...getFiltersFromUrl(),
+          dateFrom: startOfDay,
+          dateTo: endOfDay
+        });
+      }
+      
+      // Update URL directly in a non-reactive way
+      const params = new URLSearchParams(searchParams.toString());
+      params.set('from', startOfDay);
+      params.set('to', endOfDay);
+      
+      // Preserve other params
+      if (params.has('page')) {
+        params.set('page', '1'); // Reset to page 1 when applying filter
+      } else {
+        params.set('page', '1');
+      }
+      
+      // Update URL without triggering a re-render
+      router.push(`/events?${params.toString()}`, { scroll: false });
+    } else {
+      // If date filters exist, use them
+      try {
+        if (fromParam) {
+          const fromDate = new Date(fromParam);
+          let toDate = undefined;
+          
+          if (toParam) {
+            toDate = new Date(toParam);
+          }
+          
+          setDateRange({
+            from: fromDate,
+            to: toDate,
+            fromTime: searchParams.get('time_from') || undefined,
+            toTime: searchParams.get('time_to') || undefined
+          });
+        }
+      } catch (error) {
+        console.error("Error setting initial date range:", error);
+      }
+    }
+    
+    // Se temos initialFilters, eles têm prioridade
+    if (hasInitialFilters) return;
+    
+    // Carregar profissões e funis da URL
     const urlProfessionIds = searchParams.get('profession_id');
     if (urlProfessionIds) {
       setProfessionIds(urlProfessionIds.split(','));
@@ -142,20 +252,7 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
       setFunnelIds(urlFunnelIds.split(','));
     }
     
-    const fromDate = searchParams.get('from');
-    const toDate = searchParams.get('to');
-    const fromTime = searchParams.get('time_from');
-    const toTime = searchParams.get('time_to');
-    
-    if (fromDate) {
-      setDateRange({
-        from: new Date(fromDate),
-        to: toDate ? new Date(toDate) : undefined,
-        fromTime: fromTime || undefined,
-        toTime: toTime || undefined
-      });
-    }
-    
+    // Process advanced filters
     try {
       const advancedFiltersParam = searchParams.get('advanced_filters');
       if (advancedFiltersParam) {
@@ -175,10 +272,20 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
     if (urlFilterCondition) {
       setFilterCondition(urlFilterCondition);
     }
-  }, [searchParams, initialFilters]);
+    
+    // Release the update lock after initialization
+    setTimeout(() => {
+      setIsUpdatingDirectly(false);
+      isUpdatingRef.current = false;
+    }, 500);
+    
+  }, []);
   
   // Sincronizar o estado com a URL sempre que ela mudar
   useEffect(() => {
+    // Avoid synchronizing if we're updating the URL ourselves
+    if (isUpdatingDirectly || isUpdatingRef.current) return;
+    
     setIsUpdatingFromUrl(true);
     
     
@@ -211,16 +318,43 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
         } 
       : undefined;
     
-    // Comparação simples para evitar atualizações desnecessárias
-    const currentFromDate = dateRange?.from?.toISOString();
-    const currentToDate = dateRange?.to?.toISOString();
+    // Safer comparison that doesn't trigger infinite updates
+    const shouldUpdateDateRange = (() => {
+      // If one has a value and the other doesn't, they're different
+      if ((fromDate && !dateRange?.from) || (!fromDate && dateRange?.from)) {
+        return true;
+      }
+      
+      if ((toDate && !dateRange?.to) || (!toDate && dateRange?.to)) {
+        return true;
+      }
+      
+      // If both have values, compare date parts only (not time)
+      if (fromDate && dateRange?.from) {
+        const urlFromDate = new Date(fromDate).toISOString().split('T')[0]; 
+        const stateFromDate = dateRange.from.toISOString().split('T')[0];
+        if (urlFromDate !== stateFromDate) {
+          return true;
+        }
+      }
+      
+      if (toDate && dateRange?.to) {
+        const urlToDate = new Date(toDate).toISOString().split('T')[0]; 
+        const stateToDate = dateRange.to.toISOString().split('T')[0];
+        if (urlToDate !== stateToDate) {
+          return true;
+        }
+      }
+      
+      // Check time values
+      if (fromTime !== dateRange?.fromTime || toTime !== dateRange?.toTime) {
+        return true;
+      }
+      
+      return false;
+    })();
     
-    if (
-      (fromDate !== currentFromDate) || 
-      (toDate !== currentToDate) || 
-      (fromTime !== dateRange?.fromTime) || 
-      (toTime !== dateRange?.toTime)
-    ) {
+    if (shouldUpdateDateRange) {
       setDateRange(newDateRange);
     }
     
@@ -289,108 +423,126 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
     }
   }, [advancedFilterOpen, advancedFilters, filterCondition, isUpdatingFromUrl]);
   
+  // Simplify the main useEffect for updating URL based on filters
+  // Keep only one useEffect for URL updates instead of multiple competing ones
   useEffect(() => {
-    if (isUpdatingFromUrl) return; // Não atualizar a URL se a mudança veio da própria URL
+    // Skip if we're already updating from URL changes
+    if (isUpdatingFromUrl || isUpdatingDirectly || isUpdatingRef.current) return;
     
-    if (!(dateRange?.from && !dateRange?.to)) {
+    // Quick check to avoid unnecessary updates
+    if (dateRange?.from && !dateRange?.to) return;
+    
+    // Set the flag to prevent recursive updates
+    isUpdatingRef.current = true;
+    
+    const timeoutId = setTimeout(() => {
       updateUrl();
-    }
-  }, [professionIds, funnelIds, dateRange, advancedFilters, filterCondition, isUpdatingFromUrl]);
-  
-  // useEffect para atualizar a URL quando os filtros mudam
-  useEffect(() => {
-    if (!isUpdatingFromUrl && !isUpdatingDirectly) {
-      // Configurar um timeout para atualizar a URL após um breve delay para evitar múltiplas atualizações
-      const timeoutId = setTimeout(() => {
-        updateUrl();
-      }, 100);
-      
-      return () => clearTimeout(timeoutId);
-    }
-  }, [
-    professionIds,
-    funnelIds,
-    dateRange,
-    advancedFilters,
-    filterCondition,
-    isUpdatingFromUrl,
-    isUpdatingDirectly
-  ]);
+      // Reset the flag after a delay
+      setTimeout(() => {
+        isUpdatingRef.current = false;
+      }, 200);
+    }, 300);
+    
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [professionIds, funnelIds, dateRange, advancedFilters, filterCondition]);
   
   // Adicionar log para depuração dos filtros avançados
   useEffect(() => {
     if (advancedFilters.some(f => f.value.trim() !== '')) {
+      // Log aqui se necessário para debug
     }
   }, [advancedFilters, filterCondition]);
   
+  // Simplify updateUrl function to be more stable and resilient
   const updateUrl = () => {
-    // Se estamos atualizando a partir da URL, não precisamos atualizar de volta
-    if (isUpdatingFromUrl) return;
+    // Skip if we're already processing URL updates
+    if (isUpdatingFromUrl || isUpdatingRef.current) {
+      return;
+    }
 
-    // Evitar atualização se tiver só data inicial sem data final
+    // Avoid updates with incomplete date range
     if (dateRange?.from && !dateRange?.to) {
       return;
     }
     
-    const params = new URLSearchParams(searchParams.toString())
+    // Set flags to prevent recursive updates
+    setIsUpdatingDirectly(true);
+    isUpdatingRef.current = true;
     
-    // Preservar o parâmetro de página atual
-    const currentPage = params.get('page') || '1';
+    // Create new params object to avoid modifying existing searchParams
+    const params = new URLSearchParams();
     
+    // Copy non-date parameters from current URL
+    searchParams.forEach((value, key) => {
+      if (!['from', 'to', 'time_from', 'time_to', 'profession_id', 'funnel_id', 'advanced_filters', 'filter_condition'].includes(key)) {
+        params.set(key, value);
+      }
+    });
+    
+    // Preserve page parameter
+    const currentPage = searchParams.get('page') || '1';
+    params.set('page', currentPage);
+    
+    // Add profession and funnel IDs if available
     if (professionIds.length > 0) {
-      params.set('profession_id', professionIds.join(','))
-    } else {
-      params.delete('profession_id')
+      params.set('profession_id', professionIds.join(','));
     }
     
     if (funnelIds.length > 0) {
-      params.set('funnel_id', funnelIds.join(','))
-    } else {
-      params.delete('funnel_id')
+      params.set('funnel_id', funnelIds.join(','));
     }
 
+    // Add date range parameters
+    let formattedFrom: string | null = null;
+    let formattedTo: string | null = null;
+
     if (dateRange?.from) {
-      params.set('from', dateRange.from.toISOString())
+      // Format dates for Brazil timezone
+      const from = dateRange.from;
+      const year = from.getFullYear();
+      const month = String(from.getMonth() + 1).padStart(2, '0');
+      const day = String(from.getDate()).padStart(2, '0');
+      formattedFrom = `${year}-${month}-${day}T00:00:00-03:00`;
+      
+      params.set('from', formattedFrom);
       
       if (dateRange.to) {
-        params.set('to', dateRange.to.toISOString())
-      } else {
-        params.delete('to')
+        const to = dateRange.to;
+        const toYear = to.getFullYear();
+        const toMonth = String(to.getMonth() + 1).padStart(2, '0');
+        const toDay = String(to.getDate()).padStart(2, '0');
+        formattedTo = `${toYear}-${toMonth}-${toDay}T23:59:59-03:00`;
+        
+        params.set('to', formattedTo);
       }
       
       if (dateRange.fromTime) {
-        params.set('time_from', dateRange.fromTime)
-      } else {
-        params.delete('time_from')
+        params.set('time_from', dateRange.fromTime);
       }
       
       if (dateRange.toTime) {
-        params.set('time_to', dateRange.toTime)
-      } else {
-        params.delete('time_to')
+        params.set('time_to', dateRange.toTime);
       }
-    } else {
-      params.delete('from')
-      params.delete('to')
-      params.delete('time_from')
-      params.delete('time_to')
     }
     
-    // Adicionar filtros avançados à URL
-    const filtersWithValues = advancedFilters.filter(f => f.value.trim() !== '');
+    // Add advanced filters
+    const filtersWithValues = advancedFilters.filter(
+      filter => filter.property && filter.operator && filter.value.trim() !== ''
+    );
+    
     if (filtersWithValues.length > 0) {
-      const filtersJson = JSON.stringify(filtersWithValues);
-      params.set('advanced_filters', filtersJson);
-      params.set('filter_condition', filterCondition);
-    } else {
-      params.delete('advanced_filters');
-      params.delete('filter_condition');
+      try {
+        const filterJson = JSON.stringify(filtersWithValues);
+        params.set('advanced_filters', filterJson);
+        params.set('filter_condition', filterCondition);
+      } catch (e) {
+        console.error('Erro ao serializar filtros avançados:', e);
+      }
     }
     
-    // Garantir que o parâmetro de página seja mantido
-    params.set('page', currentPage);
-    
-    // Preservar parâmetros de ordenação e limite
+    // Add sorting parameters
     const sortBy = searchParams.get('sortBy');
     const sortDirection = searchParams.get('sortDirection');
     const limit = searchParams.get('limit');
@@ -399,15 +551,34 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
     if (sortDirection) params.set('sortDirection', sortDirection);
     if (limit) params.set('limit', limit);
     
-    const newUrl = `/events?${params.toString()}`
-    router.push(newUrl, { scroll: false })
+    // Check if URL has changed to avoid unnecessary updates
+    const currentUrl = searchParams.toString();
+    const newParamsString = params.toString();
     
+    if (currentUrl === newParamsString) {
+      console.log('URL já está atualizada, ignorando');
+      setIsUpdatingDirectly(false);
+      isUpdatingRef.current = false;
+      return;
+    }
+    
+    console.log('Atualizando URL:', newParamsString);
+    const newUrl = `/events?${params.toString()}`;
+    router.push(newUrl, { scroll: false });
+    
+    // Reset flags after a delay to allow URL update to complete
+    const timeoutId = setTimeout(() => {
+      setIsUpdatingDirectly(false);
+      isUpdatingRef.current = false;
+    }, 500);
+    
+    // Notify parent about filter changes
     if (onFilterChange) {
       onFilterChange({
         professionId: professionIds.length > 0 ? professionIds.join(',') : null,
         funnelId: funnelIds.length > 0 ? funnelIds.join(',') : null,
-        dateFrom: dateRange?.from ? dateRange.from.toISOString() : null,
-        dateTo: dateRange?.to ? dateRange.to.toISOString() : null,
+        dateFrom: dateRange?.from ? formattedFrom : null,
+        dateTo: dateRange?.to ? formattedTo : null,
         timeFrom: dateRange?.fromTime || null,
         timeTo: dateRange?.toTime || null,
         advancedFilters: filtersWithValues.length > 0 ? filtersWithValues : undefined,
@@ -415,8 +586,15 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
       });
     }
     
-    window.dispatchEvent(new CustomEvent('refetch-events'))
-  }
+    // Dispatch refetch event if URL has changed
+    if (currentUrl !== newParamsString) {
+      window.dispatchEvent(new CustomEvent('refetch-events'));
+    }
+    
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  };
   
   const handleProfessionChange = (newIds: string[]) => {
     setProfessionIds(newIds)
@@ -426,27 +604,81 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
     setFunnelIds(newIds)
   }
 
-  const handleDateChange = (newDate: { 
-    from?: Date; 
-    to?: Date;
-    fromTime?: string;
-    toTime?: string;
-  }) => {
-    if (!newDate.from) {
-      setDateRange(undefined)
-      return
+  const handleDateChange = (newDateRange: any) => {
+    // If newDateRange is undefined or empty, don't do anything automatically
+    if (!newDateRange || (!newDateRange.from && !newDateRange.to)) {
+      return;
     }
     
-    if (newDate.from && !newDate.to) {
-      setDateRange({
-        from: newDate.from,
-        fromTime: newDate.fromTime
-      })
-      return
+    // Otherwise, proceed with filtering as before
+    let range = newDateRange;
+    
+    // Formatar datas para o formato correto com timezone de Brasília
+    let fromDate = range?.from ? getBrazilianStartOfDay(range.from) : null;
+    let toDate = range?.to ? getBrazilianEndOfDay(range.to) : fromDate;
+    
+    // Se não temos seleção, mas temos time from/to, limpar também
+    if (!fromDate && !toDate) {
+      setDateRange(undefined);
+      
+      // Limpar do session storage, mas manter a flag que indica que já aplicamos filtro
+      sessionStorage.removeItem('events_from_date');
+      sessionStorage.removeItem('events_to_date');
+      sessionStorage.removeItem('events_time_from');
+      sessionStorage.removeItem('events_time_to');
+      
+      // Notificar mudança de filtros
+      if (onFilterChange) {
+        onFilterChange({
+          ...getFiltersFromUrl(),
+          dateFrom: null,
+          dateTo: null,
+          timeFrom: null,
+          timeTo: null
+        });
+      }
+      
+      return;
     }
     
-    setDateRange(newDate)
-  }
+    // Verificar se temos horas específicas
+    const fromTime = range?.fromTime;
+    const toTime = range?.toTime;
+    
+    // Atualizar estado local
+    setDateRange({
+      from: range?.from,
+      to: range?.to,
+      fromTime,
+      toTime
+    });
+    
+    // Notificar mudança de filtros
+    if (onFilterChange) {
+      onFilterChange({
+        ...getFiltersFromUrl(),
+        dateFrom: fromDate,
+        dateTo: toDate,
+        timeFrom: fromTime || null,
+        timeTo: toTime || null
+      });
+    }
+    
+    // Salvar no session storage
+    if (fromDate) {
+      sessionStorage.setItem('events_from_date', fromDate);
+      sessionStorage.setItem('events_default_filter_applied', 'true');
+    }
+    if (toDate) {
+      sessionStorage.setItem('events_to_date', toDate);
+    }
+    if (fromTime) {
+      sessionStorage.setItem('events_time_from', fromTime);
+    }
+    if (toTime) {
+      sessionStorage.setItem('events_time_to', toTime);
+    }
+  };
 
   const handleAdvancedFilterChange = (index: number, field: keyof AdvancedFilter, value: string) => {
     const newFilters = [...pendingAdvancedFilters];
@@ -608,55 +840,61 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
   };
 
   const handleClearFilters = () => {
+    // Reset all filter states
     setProfessionIds([]);
     setFunnelIds([]);
     setDateRange(undefined);
-    setSearchQuery("");
-    setActiveFilter("main");
     setAdvancedFilters([{ id: '1', property: 'user.fullname', operator: 'equals', value: '' }]);
     setFilterCondition('AND');
+    setPendingAdvancedFilters([{ id: '1', property: 'user.fullname', operator: 'equals', value: '' }]);
+    setPendingFilterCondition('AND');
     
-    const params = new URLSearchParams(searchParams.toString());
+    // Fetch today's date for default filter
+    const today = new Date();
+    const brazilianToday = toBrazilianTime(today);
+    const startOfDay = getBrazilianStartOfDay(brazilianToday);
+    const endOfDay = getBrazilianEndOfDay(brazilianToday);
     
-    // Preservar parâmetros de página, ordenação e limite
-    const currentPage = params.get('page') || '1';
-    const sortBy = params.get('sortBy');
-    const sortDirection = params.get('sortDirection');
-    const limit = params.get('limit');
+    // Clear URL parameters except for date range (set to today)
+    const params = new URLSearchParams();
+    params.set('from', startOfDay);
+    params.set('to', endOfDay);
+    params.set('page', '1');
     
-    // Limpar todos os parâmetros de filtro
-    params.delete('profession_id');
-    params.delete('funnel_id');
-    params.delete('from');
-    params.delete('to');
-    params.delete('time_from');
-    params.delete('time_to');
-    params.delete('advanced_filters');
-    params.delete('filter_condition');
+    // Store in session storage to persist across page refreshes
+    sessionStorage.setItem('events_default_filter_applied', 'true');
+    sessionStorage.setItem('events_from_date', startOfDay);
+    sessionStorage.setItem('events_to_date', endOfDay);
     
-    // Restaurar parâmetros preservados
-    params.set('page', currentPage);
-    if (sortBy) params.set('sortBy', sortBy);
-    if (sortDirection) params.set('sortDirection', sortDirection);
-    if (limit) params.set('limit', limit);
+    // Remove other filter params from session storage
+    sessionStorage.removeItem('events_time_from');
+    sessionStorage.removeItem('events_time_to');
     
+    // Definir flag para evitar atualizações recursivas
+    setIsUpdatingDirectly(true);
+    
+    // Update URL
     router.push(`/events?${params.toString()}`, { scroll: false });
     
+    // Resetar a flag após um pequeno delay para garantir que a URL foi atualizada
+    setTimeout(() => {
+      setIsUpdatingDirectly(false);
+    }, 100);
+    
+    // Notificar mudança de filtros se callback existir
     if (onFilterChange) {
       onFilterChange({
         professionId: null,
         funnelId: null,
-        dateFrom: null,
-        dateTo: null,
+        dateFrom: startOfDay,
+        dateTo: endOfDay,
         timeFrom: null,
         timeTo: null,
-        advancedFilters: undefined,
-        filterCondition: undefined
+        advancedFilters: [],
+        filterCondition: 'AND'
       });
     }
-    
-    window.dispatchEvent(new CustomEvent('refetch-events'));
-  }
+  };
 
   const getFilterButtonText = () => {
     if (professionIds.length === 0 && funnelIds.length === 0) {
@@ -1002,7 +1240,11 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
             </Button>
           </PopoverTrigger>
           <PopoverContent className="p-0 w-[300px]" align="start" sideOffset={5}>
-            <DateFilter onChange={handleDateChange} initialDate={dateRange} />
+            <DateFilter 
+              onChange={handleDateChange} 
+              initialDate={dateRange}
+              preventAutoSelect={true} 
+            />
           </PopoverContent>
         </Popover>
 

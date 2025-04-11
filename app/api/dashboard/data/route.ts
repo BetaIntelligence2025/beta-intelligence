@@ -15,18 +15,37 @@ const CACHE_TTL = 60; // 1 minuto
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const timeFrame = searchParams.get('timeFrame') as TimeFrame || 'Daily';
-    const from = searchParams.get('from');
-    const to = searchParams.get('to');
-    const cardType = searchParams.get('cardType');
     
-    // Determine if we should use all_data=true (when no date range is provided)
-    const useAllData = !from && !to;
+    // Get specific parameters
+    let from = searchParams.get('from');
+    let to = searchParams.get('to');
+    const timeFrame = (searchParams.get('timeFrame') || 'Daily') as TimeFrame;
+    const cardType = searchParams.get('cardType') || null;
+    
+    // Se não tiver datas, usar o dia atual no horário de Brasília
+    if (!from || !to) {
+      const today = new Date();
+      // Converter para horário de Brasília
+      const brazilDate = new Date(today.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+      
+      // Formatar as datas no formato esperado pela API
+      const year = brazilDate.getFullYear();
+      const month = String(brazilDate.getMonth() + 1).padStart(2, '0');
+      const day = String(brazilDate.getDate()).padStart(2, '0');
+      
+      from = `${year}-${month}-${day}T00:00:00-03:00`;
+      to = `${year}-${month}-${day}T23:59:59-03:00`;
+      
+      console.log('Usando data padrão (hoje) para dashboard:', { from, to });
+    }
     
     // Build query params
     const params: Record<string, string> = { 
       count_only: 'true'
     };
+    
+    // Determine if we should use all_data=true (when no date range is provided)
+    const useAllData = !from && !to;
     
     if (useAllData) {
       params.all_data = 'true';

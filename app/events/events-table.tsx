@@ -21,7 +21,7 @@ import {
   useSortable,
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import { ArrowUpDown, ChevronDown, ChevronUp, DownloadIcon, Loader2, FileIcon, FileArchiveIcon, FileText, Settings2 } from "lucide-react"
+import { ArrowUpDown, ChevronDown, ChevronUp, DownloadIcon, Loader2, FileIcon, FileArchiveIcon, FileText, Settings2, RefreshCw } from "lucide-react"
 import { Column } from "./columns"
 import { EventColumnId } from "../stores/use-events-columns-store"
 import { EventsFilters } from "./events-filters"
@@ -270,8 +270,23 @@ export function EventsTable({
   onExport,
   onPageChange
 }: EventsTableProps) {
+  // Create inline isMounted implementation
+  const [isMounted, setIsMounted] = useState(false);
+  
+  // Set isMounted to true after component mounts (client-side only)
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+  
   const router = useRouter()
   const { visibleColumns } = useColumnsStore()
+  
+  // Log dos eventos para verificar a estrutura de dados
+  useEffect(() => {
+    if (events && events.length > 0) {
+      console.log('EventsTable received data count:', events.length);
+    }
+  }, [events]);
   
   // Memorizar as colunas visíveis para evitar re-renderizações desnecessárias
   const columnsData = useMemo(() => 
@@ -341,32 +356,40 @@ export function EventsTable({
     if (filters.dateFrom !== undefined) {
       if (filters.dateFrom) {
         params.set('from', filters.dateFrom);
+        sessionStorage.setItem('events_from_date', filters.dateFrom);
       } else {
         params.delete('from');
+        sessionStorage.removeItem('events_from_date');
       }
     }
     
     if (filters.dateTo !== undefined) {
       if (filters.dateTo) {
         params.set('to', filters.dateTo);
+        sessionStorage.setItem('events_to_date', filters.dateTo);
       } else {
         params.delete('to');
+        sessionStorage.removeItem('events_to_date');
       }
     }
     
     if (filters.timeFrom !== undefined) {
       if (filters.timeFrom) {
         params.set('time_from', filters.timeFrom);
+        sessionStorage.setItem('events_time_from', filters.timeFrom);
       } else {
         params.delete('time_from');
+        sessionStorage.removeItem('events_time_from');
       }
     }
     
     if (filters.timeTo !== undefined) {
       if (filters.timeTo) {
         params.set('time_to', filters.timeTo);
+        sessionStorage.setItem('events_time_to', filters.timeTo);
       } else {
         params.delete('time_to');
+        sessionStorage.removeItem('events_time_to');
       }
     }
     
@@ -390,6 +413,11 @@ export function EventsTable({
     
     // Garantir que o parâmetro de página seja mantido
     params.set('page', currentPage);
+    
+    // Se temos filtros de data válidos, marcar que o filtro foi aplicado
+    if (params.get('from') && params.get('to')) {
+      sessionStorage.setItem('events_default_filter_applied', 'true');
+    }
     
     // Atualizar URL
     const currentParams = new URLSearchParams(searchParams);
@@ -488,7 +516,7 @@ export function EventsTable({
       clearTimeout(timer)
       window.removeEventListener('resize', calculateVisibleRows)
     }
-  }, [rowHeight, visibleRows])
+  }, [rowHeight])
 
   // Atualiza o limite apenas quando marcado para atualizar
   useEffect(() => {
@@ -508,19 +536,29 @@ export function EventsTable({
   }, [shouldUpdateLimit, visibleRows, router, searchParams]);
 
   const handlePageChange = useCallback((page: number) => {
+    // Don't trigger page changes if already loading or same page
+    if (isLoading || page === currentPage) return;
+    
+    // Explicitly set loading state for UI feedback during navigation
+    document.querySelector('.table-loading-overlay')?.classList.remove('hidden');
     
     // Atualizar a URL
     const params = new URLSearchParams(searchParams);
+    
+    // Keep all existing parameters but update the page
     params.set('page', page.toString());
     
     // Remover quaisquer parâmetros incorretos que possam estar causando problemas
     params.delete('[object Object]');
     
+    // If no date filter exists, don't add it during page navigation
+    // This preserves the simple URL format if the user hasn't set filters yet
+    
     router.push(`/events?${params.toString()}`, { scroll: false });
     
     // Chamar a função onPageChange do componente pai para sincronizar state
     onPageChange(page);
-  }, [router, searchParams, onPageChange]);
+  }, [router, searchParams, onPageChange, isLoading, currentPage]);
 
   // Verificar se todos estão selecionados e atualizar o estado selectAll
   useEffect(() => {
@@ -975,25 +1013,18 @@ export function EventsTable({
     }
   }, [columnsData, searchParams, meta]);
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center w-full h-full">
-        <div className="text-gray-500">Carregando eventos...</div>
-      </div>
-    )
-  }
-
-  return (
+  // Replace the early return with a variable
+  let tableContent = (
     <div className="flex flex-col w-full h-full">
       <div className="flex justify-between items-center mb-4">
         <div className="flex items-center gap-2">
           <EventsFilters 
             onFilterChange={handleFilterChange}
-            initialFilters={{
+            initialFilters={useMemo(() => ({
               ...getFiltersFromUrl(),
               professionId: meta?.profession_id?.toString(),
               funnelId: meta?.funnel_id?.toString()
-            }} 
+            }), [getFiltersFromUrl, meta?.profession_id, meta?.funnel_id])}
           />
           {Object.keys(selectedRows).filter(id => selectedRows[id]).length > 0 && (
             <span className="text-sm text-gray-500 ml-2">
@@ -1068,62 +1099,38 @@ export function EventsTable({
         </div>
       </div>
       <div className="border rounded-md overflow-hidden flex-1 flex flex-col">
-        <div className="overflow-auto flex-1" ref={tableContainerRef}>
-          <DndContext 
-            sensors={sensors} 
-            collisionDetection={closestCenter} 
-            onDragEnd={handleDragEnd}
-          >
+        <div className="overflow-auto flex-1 relative" ref={tableContainerRef}>
+          <div className={`absolute inset-0 bg-white/70 z-50 flex items-center justify-center table-loading-overlay ${isLoading ? '' : 'hidden'}`}>
+            <div className="flex flex-col items-center">
+              <RefreshCw className="h-8 w-8 animate-spin text-blue-500" />
+              <span className="mt-2 text-sm font-medium text-gray-600">Carregando...</span>
+            </div>
+          </div>
+          
+          {/* Render a static table during SSR, and the DndContext only on client */}
+          {!isMounted ? (
             <table className="w-full min-w-full whitespace-nowrap text-[13px] relative">
               <thead className="bg-zinc-100 sticky top-0 z-20">
                 <tr className="divide-x divide-gray-200">
-                  {/* Coluna de seleção */}
                   <th className="w-10 px-3 py-3.5 text-left">
-                    <Checkbox 
-                      checked={selectAll} 
-                      onCheckedChange={toggleSelectAll}
-                      aria-label="Selecionar todos"
-                    />
+                    <Checkbox checked={false} aria-label="Selecionar todos" />
                   </th>
-                  {/* Restante das colunas */}
-                  <SortableContext 
-                    items={columnsData.map(col => col.accessorKey)} 
-                    strategy={horizontalListSortingStrategy}
-                  >
-                    {columnsData.map((column) => (
-                      <SortableHeader
-                        key={column.accessorKey}
-                        column={column}
-                        sortColumn={sortColumn}
-                        sortDirection={sortDirection as 'asc' | 'desc' | null}
-                        onSort={handleSort}
-                      />
-                    ))}
-                  </SortableContext>
+                  {columnsData.map((column) => (
+                    <th 
+                      key={column.accessorKey}
+                      className="group relative px-3 py-3.5 text-left text-sm font-semibold text-gray-900"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center cursor-pointer">
+                          {column.header}
+                        </div>
+                      </div>
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {Array.isArray(events) && events.map((event: Event) => (
-                  <EventsTableRow 
-                    key={event.event_id}
-                    event={event} 
-                    visibleColumns={columnsData.map(col => col.accessorKey as EventColumnId)}
-                    isSelected={!!selectedRows[event.event_id]}
-                    onSelectChange={toggleRowSelection}
-                  />
-                ))}
-                {/* Linhas vazias para preencher o espaço restante */}
-                {Array.isArray(events) && events.length > 0 && events.length < visibleRows && (
-                  Array.from({ length: visibleRows - events.length }).map((_, index) => (
-                    <tr key={`empty-${index}`} className="h-[46px]">
-                      <td className="w-10 px-3 py-3.5 border-b"></td>
-                      {columnsData.map((col) => (
-                        <td key={`empty-${index}-${col.accessorKey}`} className="px-4 py-2 border-b"></td>
-                      ))}
-                    </tr>
-                  ))
-                )}
-                {(!events || events.length === 0) && (
+                {!isLoading && (!events || events.length === 0) && (
                   <tr>
                     <td 
                       colSpan={columnsData.length + 1} 
@@ -1135,7 +1142,75 @@ export function EventsTable({
                 )}
               </tbody>
             </table>
-          </DndContext>
+          ) : (
+            <DndContext 
+              sensors={sensors} 
+              collisionDetection={closestCenter} 
+              onDragEnd={handleDragEnd}
+            >
+              <table className="w-full min-w-full whitespace-nowrap text-[13px] relative">
+                <thead className="bg-zinc-100 sticky top-0 z-20">
+                  <tr className="divide-x divide-gray-200">
+                    {/* Coluna de seleção */}
+                    <th className="w-10 px-3 py-3.5 text-left">
+                      <Checkbox 
+                        checked={selectAll} 
+                        onCheckedChange={toggleSelectAll}
+                        aria-label="Selecionar todos"
+                      />
+                    </th>
+                    {/* Restante das colunas */}
+                    <SortableContext 
+                      items={columnsData.map(col => col.accessorKey)} 
+                      strategy={horizontalListSortingStrategy}
+                    >
+                      {columnsData.map((column) => (
+                        <SortableHeader
+                          key={column.accessorKey}
+                          column={column}
+                          sortColumn={sortColumn}
+                          sortDirection={sortDirection as 'asc' | 'desc' | null}
+                          onSort={handleSort}
+                        />
+                      ))}
+                    </SortableContext>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {Array.isArray(events) && events.map((event: Event) => (
+                    <EventsTableRow 
+                      key={event.event_id}
+                      event={event} 
+                      visibleColumns={columnsData.map(col => col.accessorKey as EventColumnId)}
+                      isSelected={!!selectedRows[event.event_id]}
+                      onSelectChange={toggleRowSelection}
+                    />
+                  ))}
+                  {/* Linhas vazias para preencher o espaço restante */}
+                  {Array.isArray(events) && events.length > 0 && events.length < visibleRows && (
+                    Array.from({ length: visibleRows - events.length }).map((_, index) => (
+                      <tr key={`empty-${index}`} className="h-[46px]">
+                        <td className="w-10 px-3 py-3.5 border-b"></td>
+                        {columnsData.map((col) => (
+                          <td key={`empty-${index}-${col.accessorKey}`} className="px-4 py-2 border-b"></td>
+                        ))}
+                      </tr>
+                    ))
+                  )}
+                  {(!events || events.length === 0) && !isLoading && (
+                    <tr>
+                      <td 
+                        colSpan={columnsData.length + 1} 
+                        className="px-6 py-4 text-center text-gray-500 text-xs"
+                      >
+                        Nenhum evento encontrado
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </DndContext>
+          )}
         </div>
         {/* Sempre exibir a paginação, mesmo quando não há resultados */}
         <div className="p-2 border-t bg-white">
@@ -1145,9 +1220,19 @@ export function EventsTable({
             perPage={meta?.limit || 10}
             onPageChange={handlePageChange}
             onPerPageChange={onPerPageChange}
+            isLoading={isLoading}
+            onRefresh={() => {
+              // Show loading state
+              document.querySelector('.table-loading-overlay')?.classList.remove('hidden');
+              
+              // Trigger a refetch without changing the page
+              window.dispatchEvent(new CustomEvent('refetch-events'));
+            }}
           />
         </div>
       </div>
     </div>
-  )
+  );
+
+  return tableContent;
 } 

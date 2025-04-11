@@ -4,6 +4,7 @@ import { EventColumnId } from "../stores/use-events-columns-store"
 import { Event } from "../types/events-type"
 import { useState, useEffect } from "react"
 import { Checkbox } from "@/components/ui/checkbox"
+import { formatBrazilianDate } from "@/lib/date-utils"
 
 interface EventsTableRowProps {
   event: Event
@@ -34,6 +35,176 @@ export function EventsTableRow({
     const keys = key.split('.')
     let value: any = event
     
+    // Check for direct camelCase UTM properties on the event object
+    // These are priorities - preferred access pattern
+    if (['utmSource', 'utmMedium', 'utmCampaign', 'utmContent', 'utmTerm'].includes(key)) {
+      // Primary: Direct properties with camelCase (highest priority)
+      if (key in event && event[key as keyof Event] !== null && event[key as keyof Event] !== undefined && event[key as keyof Event] !== '') {
+        return event[key as keyof Event];
+      }
+      
+      // Secondary: Structured utm_data
+      const snakeKey = key.replace(/([A-Z])/g, '_$1').toLowerCase();
+      if (event.utm_data && typeof event.utm_data === 'object' && snakeKey in event.utm_data) {
+        const utmValue = event.utm_data[snakeKey as keyof typeof event.utm_data];
+        if (utmValue && utmValue !== '') {
+          return utmValue;
+        }
+      }
+      
+      // Tertiary: User object with initial prefix
+      const userKey = 'initial' + key;
+      if (event.user && typeof event.user === 'object' && userKey in event.user) {
+        const userUtmValue = event.user[userKey as keyof typeof event.user];
+        if (userUtmValue && userUtmValue !== '') {
+          return userUtmValue;
+        }
+      }
+      
+      // Quaternary: Session object
+      if (event.session && typeof event.session === 'object' && snakeKey in event.session) {
+        return event.session[snakeKey as keyof typeof event.session];
+      }
+      
+      return '-';
+    }
+    
+    // Handle location and device properties from user
+    if (keys.length === 2 && keys[0] === 'user' && 
+        (keys[1] === 'initialCountry' || keys[1] === 'initialRegion' || 
+         keys[1] === 'initialCity' || keys[1] === 'initialDeviceType')) {
+      const property = keys[1];
+      
+      // Direct access from user object
+      if (event.user && typeof event.user === 'object' && property in event.user) {
+        const value = event.user[property as keyof typeof event.user];
+        if (value && value !== '') {
+          return value;
+        }
+      }
+      
+      // Fallback to session for location data
+      if (property === 'initialCountry' && event.session?.country) {
+        return event.session.country;
+      }
+      if (property === 'initialRegion' && event.session?.state) {
+        return event.session.state;
+      }
+      if (property === 'initialCity' && event.session?.city) {
+        return event.session.city;
+      }
+      
+      return '-';
+    }
+    
+    // Handle UTM keys from user object
+    if (keys.length === 2 && keys[0] === 'user' && keys[1].startsWith('initial')) {
+      const utmProperty = keys[1]; // e.g., initialUtmSource
+      
+      // Convert initialUtmSource to utmSource for direct access
+      const directUtmKey = utmProperty.replace('initial', ''); // e.g., UtmSource
+      
+      // Convert initialUtmSource to utm_source for utm_data access
+      const utmKeyFormatted = utmProperty.replace('initial', '').charAt(0).toLowerCase() + utmProperty.replace('initial', '').slice(1); // e.g., utmSource
+      const standardUtmKey = utmKeyFormatted.replace(/([A-Z])/g, '_$1').toLowerCase(); // e.g., utm_source
+      
+      // Priority 1: Direct properties on event (camelCase)
+      if (directUtmKey in event && event[directUtmKey as keyof Event] !== null && event[directUtmKey as keyof Event] !== undefined && event[directUtmKey as keyof Event] !== '') {
+        return event[directUtmKey as keyof Event];
+      }
+      
+      // Priority 2: utm_data structure (snake_case)
+      if (event.utm_data && typeof event.utm_data === 'object' && standardUtmKey in event.utm_data) {
+        const utmValue = event.utm_data[standardUtmKey as keyof typeof event.utm_data];
+        if (utmValue && utmValue !== '') {
+          return utmValue;
+        }
+      }
+      
+      // Priority 3: user object with initial prefix
+      if (event.user && typeof event.user === 'object' && utmProperty in event.user) {
+        const userUtmValue = event.user[utmProperty as keyof typeof event.user];
+        if (userUtmValue && userUtmValue !== '') {
+          return userUtmValue;
+        }
+      }
+      
+      // Fallback: session UTM data
+      if (event.session && typeof event.session === 'object' && standardUtmKey in event.session) {
+        return event.session[standardUtmKey as keyof typeof event.session];
+      }
+      
+      // Return dash if UTM key isn't found
+      return '-';
+    }
+    
+    // Legacy support for session UTM keys (session.utm_source)
+    if (keys.length === 2 && keys[0] === 'session' && keys[1].startsWith('utm_')) {
+      const utmKey = keys[1]; // e.g., utm_source
+      
+      // Convert utm_source to UtmSource for direct property access
+      const directUtmKey = 'utm' + utmKey.split('_')[1].charAt(0).toUpperCase() + utmKey.split('_')[1].slice(1);
+      
+      // Priority 1: Direct properties on event (camelCase)
+      if (directUtmKey in event && event[directUtmKey as keyof Event] !== null && event[directUtmKey as keyof Event] !== undefined && event[directUtmKey as keyof Event] !== '') {
+        return event[directUtmKey as keyof Event];
+      }
+      
+      // Priority 2: utm_data structure (snake_case)
+      if (event.utm_data && typeof event.utm_data === 'object' && utmKey in event.utm_data) {
+        const utmValue = event.utm_data[utmKey as keyof typeof event.utm_data];
+        if (utmValue && utmValue !== '') {
+          return utmValue;
+        }
+      }
+      
+      // Priority 3: user UTM data with initial prefix
+      if (event.user && typeof event.user === 'object') {
+        const initialUtmKey = 'initial' + directUtmKey;
+        
+        if (initialUtmKey in event.user) {
+          const userUtmValue = event.user[initialUtmKey as keyof typeof event.user];
+          if (userUtmValue && userUtmValue !== '') {
+            return userUtmValue;
+          }
+        }
+      }
+      
+      // Fallback: session UTM data
+      if (event.session && typeof event.session === 'object' && utmKey in event.session) {
+        return event.session[utmKey as keyof typeof event.session];
+      }
+      
+      // Return dash if UTM key isn't found
+      return '-';
+    }
+    
+    // Direct access to utm_data fields (utm_source)
+    if (keys.length === 1 && keys[0].startsWith('utm_')) {
+      const utmKey = keys[0]; // e.g., utm_source
+      
+      // Convert utm_source to utmSource for direct property access
+      const parts = utmKey.split('_');
+      let directUtmKey = 'utm' + parts[1].charAt(0).toUpperCase() + parts[1].slice(1);
+      
+      // Priority 1: Direct properties on event (camelCase)
+      if (directUtmKey in event && event[directUtmKey as keyof Event] !== null && event[directUtmKey as keyof Event] !== undefined && event[directUtmKey as keyof Event] !== '') {
+        return event[directUtmKey as keyof Event];
+      }
+      
+      // Priority 2: utm_data structure (snake_case)
+      if (event.utm_data && typeof event.utm_data === 'object' && utmKey in event.utm_data) {
+        const utmValue = event.utm_data[utmKey as keyof typeof event.utm_data];
+        if (utmValue && utmValue !== '') {
+          return utmValue;
+        }
+      }
+      
+      // Return dash if UTM key isn't found
+      return '-';
+    }
+    
+    // Regular flow for non-UTM fields
     for (const k of keys) {
       if (value === null || value === undefined) return '-'
       
@@ -49,7 +220,13 @@ export function EventsTableRow({
       value = value[k as keyof typeof value]
     }
 
-    if (typeof value === 'boolean') {
+    // Special handling for isClient - return the raw boolean
+    if (keys.length === 2 && keys[0] === 'user' && keys[1] === 'isClient') {
+      return value; // Return raw boolean for the cell renderer to handle
+    }
+
+    // For other boolean values
+    if (typeof value === 'boolean' && key !== 'user.isClient') {
       return value ? 'Sim' : 'Não'
     }
 
@@ -57,8 +234,9 @@ export function EventsTableRow({
       return '-'
     }
 
+    // Use Brazilian date formatting for event_time
     if (key === 'event_time') {
-      return new Date(value).toLocaleString('pt-BR')
+      return formatBrazilianDate(value);
     }
 
     return value
@@ -84,11 +262,11 @@ export function EventsTableRow({
       'profissao': '140px',
       'produto': '140px',
       'funil': '140px',
-      'utmSource': '140px',
-      'utmMedium': '140px',
-      'utmCampaign': '180px',
-      'utmContent': '160px',
-      'utmTerm': '140px',
+      'utm_source': '140px',
+      'utm_medium': '140px',
+      'utm_campaign': '180px',
+      'utm_content': '160px',
+      'utm_term': '140px',
       'pais': '100px',
       'estado': '100px',
       'cidade': '140px',
@@ -123,7 +301,7 @@ export function EventsTableRow({
             }}
           >
             {column?.cell 
-              ? column.cell({ row: { getValue } })
+              ? column.cell({ row: { getValue: (key: string) => getValue(key) } })
               : String(getValue(columnId) ?? '-')}
           </td>
         )

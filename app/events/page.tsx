@@ -6,11 +6,19 @@ import { EventsTable } from "./events-table";
 import { createClient } from "@/utils/supabase/client";
 import { useState, useCallback, useEffect, useRef, Suspense } from "react";
 import { redirect, useRouter, useSearchParams } from "next/navigation";
+import { 
+  toBrazilianTime, 
+  formatBrazilianDate, 
+  getBrazilianStartOfDay, 
+  getBrazilianEndOfDay, 
+  BRAZIL_TIMEZONE 
+} from '@/lib/date-utils';
 
 const fetchEvents = async ({ queryKey }: any) => {
   const [_, page, limit, sortConfig, searchParamsString] = queryKey;
   const searchParams = new URLSearchParams(searchParamsString);
   
+  console.log('Fetching events');
   
   // Criar uma nova instância de URLSearchParams para a requisição
   const params = new URLSearchParams();
@@ -50,7 +58,9 @@ const fetchEvents = async ({ queryKey }: any) => {
   if (!response.ok) {
     throw new Error('Falha ao buscar eventos');
   }
-  return response.json();
+  const data = await response.json();
+  
+  return data;
 };
 
 function EventsContent() {
@@ -63,6 +73,9 @@ function EventsContent() {
   
   // Manter um estado para verificar se houve mudança nos parâmetros
   const [hasSearchParamsChanged, setHasSearchParamsChanged] = useState(false);
+  
+  // Add manual loading state for UI updates
+  const [isManualLoading, setIsManualLoading] = useState(false);
   
   const [currentPage, setCurrentPage] = useState(
     Number(searchParams.get('page')) || 1
@@ -158,11 +171,121 @@ function EventsContent() {
     }
   }, [hasSearchParamsChanged]);
 
+  // Efeito para inicializar os parâmetros de data se não existirem
+  const initialUrlSetupRef = useRef(false);
+  const blockRefetchRef = useRef(false);
+  
+  // Function to set current day filter and reload data
+  const setCurrentDayFilter = useCallback(() => {
+    const today = new Date();
+    const brazilianToday = toBrazilianTime(today);
+    const startOfDay = getBrazilianStartOfDay(brazilianToday);
+    const endOfDay = getBrazilianEndOfDay(brazilianToday);
+    
+    console.log("Setting current day filter:", { startOfDay, endOfDay });
+    
+    // Create new params while preserving other filters
+    const params = new URLSearchParams(searchParams.toString());
+    
+    // Set date range to current day
+    params.set('from', startOfDay);
+    params.set('to', endOfDay);
+    
+    // Explicitly set page to 1
+    params.set('page', '1');
+    
+    // Store in session storage to persist across page refreshes
+    // Set a flag to indicate that we've already done the initial setup
+    localStorage.setItem('events_initial_setup_done', 'true');
+    sessionStorage.setItem('events_default_filter_applied', 'true');
+    sessionStorage.setItem('events_from_date', startOfDay);
+    sessionStorage.setItem('events_to_date', endOfDay);
+    
+    // Update URL without reloading - use replace to avoid adding to history
+    router.replace(`/events?${params.toString()}`, { scroll: false });
+    
+    // Trigger refetch
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('refetch-events'));
+    }, 100);
+  }, [router, searchParams]);
+  
+  // Use the function in the initialization effect
+  useEffect(() => {
+    // Evitar execução múltipla
+    if (initialUrlSetupRef.current) return;
+    
+    // Check if we're on the exact URL /events without any parameters
+    const hasNoParams = searchParams.toString() === '';
+    
+    // Marcar como inicializado para evitar múltiplas execuções
+    initialUrlSetupRef.current = true;
+    
+    // For clean URLs (first entry), just set page=1 without any date filters
+    if (hasNoParams) {
+      console.log("First entry with clean URL - setting just page=1");
+      
+      // Simplify URL to just page=1
+      router.replace('/events?page=1', { scroll: false });
+      
+      // Note: We don't set any date filters here automatically
+      // Mark that we've done initial setup
+      localStorage.setItem('events_initial_setup_done', 'true');
+      return;
+    }
+    
+    // For URLs with params but missing page, add page=1
+    const pageParam = searchParams.get('page');
+    if (!pageParam) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set('page', '1');
+      
+      // Update URL without reloading
+      router.replace(`/events?${params.toString()}`, { scroll: false });
+    }
+    
+    // Fix incorrect date formats if needed, but only if they already exist in URL
+    const fromParam = searchParams.get('from');
+    const toParam = searchParams.get('to');
+    
+    if ((fromParam && !fromParam.includes('-03:00')) || (toParam && !toParam.includes('-03:00'))) {
+      console.log("Fixing date format in existing parameters");
+      
+      // Criar novos parâmetros mantendo os existentes
+      const params = new URLSearchParams(searchParams.toString());
+      
+      // Verificar e corrigir formato
+      if (fromParam && !fromParam.includes('-03:00')) {
+        const fromDate = toBrazilianTime(new Date(fromParam));
+        params.set('from', getBrazilianStartOfDay(fromDate));
+      }
+      
+      if (toParam && !toParam.includes('-03:00')) {
+        const toDate = toBrazilianTime(new Date(toParam));
+        params.set('to', getBrazilianEndOfDay(toDate));
+      }
+      
+      // Ensure page=1 is in the URL
+      params.set('page', '1');
+      
+      // Atualizar URL sem recarregar a página, usando replace
+      router.replace(`/events?${params.toString()}`, { scroll: false });
+      
+      // Dispatch event to refetch data
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('refetch-events'));
+      }, 100);
+    }
+    
+  }, [searchParams, router]);
+  
   if (!supabase.auth.getUser()) {
     return redirect("/sign-in");
   }
 
   const handlePageChange = useCallback((newPage: number) => {
+    // Set manual loading when changing pages
+    setIsManualLoading(true);
     
     // Obter os parâmetros atuais incluindo filtros avançados
     const params = new URLSearchParams(searchParams.toString());
@@ -233,16 +356,20 @@ function EventsContent() {
     placeholderData: (previousData) => previousData,
   });
   
-  // Adicionar listener para o evento customizado
+  // Modificar o refetch para evitar ciclos infinitos
   useEffect(() => {
     const refetchHandler = () => {
+      // Não fazer refetch se estamos bloqueando chamadas
+      if (blockRefetchRef.current) return;
       
-      // Verificar se temos filtros avançados antes de fazer o refetch
-      const advancedFilters = searchParams.get('advanced_filters');
+      // Set manual loading state when refetching
+      setIsManualLoading(true);
       
-      // Forçar um refetch imediato, mas preservando o estado atual
-      // Não vamos criar novos parâmetros nem atualizar a URL, apenas recarregar dados
-      refetch();
+      // Forçar um refetch imediato
+      refetch().finally(() => {
+        // Clear manual loading when refetch completes
+        setIsManualLoading(false);
+      });
     };
     
     window.addEventListener('refetch-events', refetchHandler);
@@ -250,14 +377,25 @@ function EventsContent() {
     return () => {
       window.removeEventListener('refetch-events', refetchHandler);
     };
-  }, [refetch, searchParams]);
+  }, [refetch]);
 
+  // Clear manual loading when query loading state changes
+  useEffect(() => {
+    if (!isLoading) {
+      setIsManualLoading(false);
+    }
+  }, [isLoading]);
+  
   return (
     <div className="flex flex-col h-full w-full" ref={containerRef}>
       <div className="w-full flex justify-between pb-4">
         <PageHeader pageTitle="Eventos" />
       </div>
       <div className="flex-1 flex flex-col bg-white overflow-hidden">
+        {/* Log dos eventos passados para a tabela */}
+        {eventsData?.events && console.log('Events passed to table:', {
+          count: eventsData.events.length
+        })}
         <EventsTable 
           events={eventsData?.events || []}
           meta={eventsData?.meta || {
@@ -266,7 +404,7 @@ function EventsContent() {
             limit: limit,
             last_page: 1
           }}
-          isLoading={isLoading || !hasCalculatedLimit} 
+          isLoading={isLoading || isManualLoading || !hasCalculatedLimit} 
           onSort={handleSort}
           onPerPageChange={handlePerPageChange}
           currentPage={currentPage}

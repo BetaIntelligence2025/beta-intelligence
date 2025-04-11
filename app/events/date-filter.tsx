@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { Calendar } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -16,6 +16,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { 
+  toBrazilianTime, 
+  formatBrazilianDate, 
+  getBrazilianStartOfDay, 
+  getBrazilianEndOfDay, 
+  BRAZIL_TIMEZONE 
+} from "@/lib/date-utils"
 
 interface DateFilterProps {
   onChange?: (date: { 
@@ -30,24 +37,61 @@ interface DateFilterProps {
     fromTime?: string;
     toTime?: string;
   };
+  preventAutoSelect?: boolean;
 }
 
-export function DateFilter({ onChange, initialDate }: DateFilterProps) {
+export function DateFilter({ onChange, initialDate, preventAutoSelect = false }: DateFilterProps) {
   // Estado para as datas
-  const [selectedDates, setSelectedDates] = useState<DateRange | undefined>(() => {
-    if (initialDate?.from) {
-      return {
-        from: new Date(initialDate.from),
-        to: initialDate.to ? new Date(initialDate.to) : undefined
-      }
-    }
-    return undefined
-  })
+  const [selectedDates, setSelectedDates] = useState<DateRange | undefined>(initialDate ? 
+    { from: initialDate.from, to: initialDate.to } : undefined);
+  const [fromTime, setFromTime] = useState<string>(initialDate?.fromTime || "00:00");
+  const [toTime, setToTime] = useState<string>(initialDate?.toTime || "23:59");
+  const [showCustomTime, setShowCustomTime] = useState<boolean>(!!initialDate?.fromTime);
 
-  // Estado para o tempo
-  const [showCustomTime, setShowCustomTime] = useState(Boolean(initialDate?.fromTime))
-  const [fromTime, setFromTime] = useState(initialDate?.fromTime || "00:00")
-  const [toTime, setToTime] = useState(initialDate?.toTime || "23:59")
+  // Usar uma ref para garantir que este efeito execute apenas uma vez
+  const didInitializeRef = useRef(false);
+
+  // Ao montar o componente, se não houver data inicial, selecionar o dia atual
+  useEffect(() => {
+    // Usar uma ref para garantir que este efeito execute apenas uma vez
+    if (didInitializeRef.current) return;
+    
+    // Skip auto-selecting if preventAutoSelect is true
+    if (preventAutoSelect) {
+      didInitializeRef.current = true;
+      return;
+    }
+    
+    if (!initialDate?.from && !selectedDates?.from) {
+      // Obter a data atual no fuso horário de Brasília usando nossas novas funções
+      const brToday = toBrazilianTime(new Date());
+      
+      // Configurar início e fim do dia
+      const from = startOfDay(brToday);
+      const to = endOfDay(brToday);
+      
+      console.log('DateFilter: inicializando com a data atual (Brasília):', { 
+        from: from.toISOString(), 
+        to: to.toISOString() 
+      });
+      
+      didInitializeRef.current = true;
+      setSelectedDates({ from, to });
+      
+      // Notificar mudança
+      if (onChange) {
+        onChange({
+          from: new Date(from),
+          to: new Date(to),
+          fromTime: undefined,
+          toTime: undefined
+        });
+      }
+    } else {
+      didInitializeRef.current = true;
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Função para notificar mudanças
   const updateFilters = useCallback(() => {
@@ -89,95 +133,119 @@ export function DateFilter({ onChange, initialDate }: DateFilterProps) {
   const handleDateSelect = useCallback((newDate: DateRange | undefined) => {
     // Se está limpando a seleção
     if (!newDate?.from) {
-      setSelectedDates(undefined)
+      setSelectedDates(undefined);
       if (onChange) {
         onChange({
           from: undefined,
           to: undefined,
           fromTime: undefined,
           toTime: undefined
-        })
+        });
       }
-      return
+      return;
     }
 
     // Atualiza o estado interno
-    setSelectedDates(newDate)
+    setSelectedDates(newDate);
     
     // Notifica mudança apenas quando tiver um intervalo completo (data inicial E final)
     if (onChange && newDate.to) {
-      const from = new Date(newDate.from)
-      const to = new Date(newDate.to)
+      const from = new Date(newDate.from);
+      const to = new Date(newDate.to);
 
       if (showCustomTime) {
-        const [fromHours, fromMinutes] = fromTime.split(":").map(Number)
-        const [toHours, toMinutes] = toTime.split(":").map(Number)
+        const [fromHours, fromMinutes] = fromTime.split(":").map(Number);
+        const [toHours, toMinutes] = toTime.split(":").map(Number);
         
-        from.setHours(fromHours, fromMinutes, 0, 0)
-        to.setHours(toHours, toMinutes, 59, 999)
+        from.setHours(fromHours, fromMinutes, 0, 0);
+        to.setHours(toHours, toMinutes, 59, 999);
       } else {
-        from.setHours(0, 0, 0, 0)
-        to.setHours(23, 59, 59, 999)
+        from.setHours(0, 0, 0, 0);
+        to.setHours(23, 59, 59, 999);
       }
+
+      // Log para depuração
+      console.log("DateFilter: enviando data selecionada:", { 
+        from: from.toISOString(), 
+        to: to.toISOString() 
+      });
 
       onChange({
         from,
         to,
         fromTime: showCustomTime ? fromTime : undefined,
         toTime: showCustomTime ? toTime : undefined
-      })
+      });
     } else if (onChange && !newDate.to) {
-      // Quando apenas a data inicial está selecionada, atualizamos o estado mas não aplicamos o filtro
+      // Quando apenas a data inicial está selecionada
+      const from = new Date(newDate.from);
+      from.setHours(0, 0, 0, 0);
+      
       onChange({
-        from: new Date(newDate.from),
+        from,
         to: undefined,
         fromTime: showCustomTime ? fromTime : undefined,
         toTime: undefined
-      })
+      });
     }
-  }, [onChange, showCustomTime, fromTime, toTime])
+  }, [onChange, showCustomTime, fromTime, toTime]);
 
   // Handler para seleção rápida
   const handleQuickSelect = useCallback((period: "today" | "yesterday" | "last7" | "last30" | "thisMonth" | "lastMonth") => {
-    const today = new Date()
-    let from: Date
-    let to: Date
+    // Obter a data atual no horário de Brasília
+    const brToday = toBrazilianTime(new Date());
+    
+    let from: Date;
+    let to: Date;
 
     switch (period) {
       case "today":
-        from = startOfDay(today)
-        to = endOfDay(today)
-        break
+        from = startOfDay(brToday);
+        to = endOfDay(brToday);
+        break;
       case "yesterday":
-        from = startOfDay(subDays(today, 1))
-        to = endOfDay(subDays(today, 1))
-        break
+        const yesterday = new Date(brToday);
+        yesterday.setDate(brToday.getDate() - 1);
+        from = startOfDay(yesterday);
+        to = endOfDay(yesterday);
+        break;
       case "last7":
-        from = startOfDay(subDays(today, 6))
-        to = endOfDay(today)
-        break
+        const last7 = new Date(brToday);
+        last7.setDate(brToday.getDate() - 6);
+        from = startOfDay(last7);
+        to = endOfDay(brToday);
+        break;
       case "last30":
-        from = startOfDay(subDays(today, 29))
-        to = endOfDay(today)
-        break
+        const last30 = new Date(brToday);
+        last30.setDate(brToday.getDate() - 29);
+        from = startOfDay(last30);
+        to = endOfDay(brToday);
+        break;
       case "thisMonth":
-        from = startOfMonth(today)
-        to = endOfMonth(today)
-        break
+        from = startOfMonth(brToday);
+        to = endOfMonth(brToday);
+        break;
       case "lastMonth":
-        const lastMonth = subMonths(today, 1)
-        from = startOfMonth(lastMonth)
-        to = endOfMonth(lastMonth)
-        break
+        const lastMonth = new Date(brToday);
+        lastMonth.setMonth(brToday.getMonth() - 1);
+        from = startOfMonth(lastMonth);
+        to = endOfMonth(lastMonth);
+        break;
       default:
-        return
+        return;
     }
 
-    const newDate = { from, to }
-    setSelectedDates(newDate)
-    setShowCustomTime(false)
-    setFromTime("00:00")
-    setToTime("23:59")
+    const newDate = { from, to };
+    setSelectedDates(newDate);
+    setShowCustomTime(false);
+    setFromTime("00:00");
+    setToTime("23:59");
+
+    // Log para depuração
+    console.log(`DateFilter: seleção rápida ${period}:`, {
+      from: from.toISOString(),
+      to: to.toISOString()
+    });
 
     if (onChange) {
       onChange({
@@ -185,9 +253,9 @@ export function DateFilter({ onChange, initialDate }: DateFilterProps) {
         to: new Date(to),
         fromTime: undefined,
         toTime: undefined
-      })
+      });
     }
-  }, [onChange])
+  }, [onChange]);
 
   // Handler para mudança de hora
   const handleTimeChange = useCallback((isStart: boolean, value: string) => {

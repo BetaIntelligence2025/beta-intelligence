@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react'
 import { Button } from './ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -16,6 +16,8 @@ interface PaginationProps {
   perPage: number
   onPageChange: (pageIndex: number) => Promise<void> | void
   onPerPageChange?: (perPage: number) => void
+  isLoading?: boolean
+  onRefresh?: () => void
 }
 
 export function Pagination({
@@ -24,6 +26,8 @@ export function Pagination({
   perPage,
   onPageChange,
   onPerPageChange,
+  isLoading = false,
+  onRefresh
 }: PaginationProps) {
   const [goToPageValue, setGoToPageValue] = useState<string>(String(pageIndex))
   
@@ -34,6 +38,8 @@ export function Pagination({
   const totalPages = Math.ceil(totalCount / perPage) || 1
   
   const handleGoToPage = () => {
+    if (isLoading) return
+    
     const pageNumber = parseInt(goToPageValue, 10)
     
     if (!isNaN(pageNumber) && pageNumber >= 1 && pageNumber <= totalPages) {
@@ -60,10 +66,17 @@ export function Pagination({
           variant="ghost"
           size="icon"
           className="h-8 w-8"
-          onClick={() => onPageChange(pageIndex - 1)}
-          disabled={pageIndex <= 1}
+          onClick={() => {
+            if (isLoading) return
+            onPageChange(pageIndex - 1)
+          }}
+          disabled={pageIndex <= 1 || isLoading}
         >
-          <ChevronLeft className="h-4 w-4" />
+          {isLoading ? (
+            <RefreshCw className="h-4 w-4 animate-spin" />
+          ) : (
+            <ChevronLeft className="h-4 w-4" />
+          )}
         </Button>
         
         <span className="text-sm font-medium whitespace-nowrap">Página</span>
@@ -77,6 +90,7 @@ export function Pagination({
           onBlur={handleGoToPage}
           onKeyDown={handleKeyDown}
           className="h-8 w-14 text-center"
+          disabled={isLoading}
         />
         
         <span className="text-sm whitespace-nowrap">de {totalPages}</span>
@@ -85,34 +99,59 @@ export function Pagination({
           variant="ghost"
           size="icon"
           className="h-8 w-8"
-          onClick={() => onPageChange(pageIndex + 1)}
-          disabled={pageIndex >= totalPages}
+          onClick={() => {
+            if (isLoading) return
+            onPageChange(pageIndex + 1)
+          }}
+          disabled={pageIndex >= totalPages || isLoading}
         >
-          <ChevronRight className="h-4 w-4" />
+          {isLoading ? (
+            <RefreshCw className="h-4 w-4 animate-spin" />
+          ) : (
+            <ChevronRight className="h-4 w-4" />
+          )}
         </Button>
+        
+        {onRefresh && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 ml-1"
+            onClick={onRefresh}
+            disabled={isLoading}
+          >
+            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+          </Button>
+        )}
       </div>
       
       <div className="flex items-center gap-2">
         <Select
           value={String(perPage)}
           onValueChange={(value) => {
-            if (onPerPageChange) {
+            if (onPerPageChange && !isLoading) {
               const newPerPage = parseInt(value, 10);
               onPerPageChange(newPerPage);
             }
           }}
+          disabled={isLoading}
         >
           <SelectTrigger className="h-8 min-w-[100px] w-auto border-none">
             <SelectValue>{perPage} linhas</SelectValue>
           </SelectTrigger>
           <SelectContent>
+            <SelectItem value="10">10 linhas</SelectItem>
+            <SelectItem value="25">25 linhas</SelectItem>
+            <SelectItem value="50">50 linhas</SelectItem>
             <SelectItem value="100">100 linhas</SelectItem>
             <SelectItem value="500">500 linhas</SelectItem>
             <SelectItem value="1000">1000 linhas</SelectItem>
           </SelectContent>
         </Select>
         
-        <span className="text-sm text-gray-500 whitespace-nowrap">{totalCount} registros</span>
+        <span className="text-sm text-gray-500 whitespace-nowrap">
+          {isLoading ? 'Carregando...' : `${totalCount} registros`}
+        </span>
       </div>
     </div>
   )

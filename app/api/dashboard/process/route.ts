@@ -78,6 +78,23 @@ async function processDataWithTimeFrame(
       }
     }
     
+    // Check if we're looking at only the current day
+    const today = new Date();
+    const todayString = format(today, 'yyyy-MM-dd');
+    const isOnlyToday = fromDate === todayString && toDate === todayString;
+    
+    // Check if this is a single day filter (where from and to dates are the same)
+    const isSingleDayFilter = fromDate && toDate && fromDate === toDate;
+    
+    // If only a single day is selected, include previous day as well to have at least two points
+    if (isSingleDayFilter) {
+      const selectedDate = new Date(fromDate!);
+      const previousDay = new Date(selectedDate);
+      previousDay.setDate(previousDay.getDate() - 1);
+      fromDate = format(previousDay, 'yyyy-MM-dd');
+      console.log('Extending date range to include previous day:', { fromDate, toDate });
+    }
+    
     // Group data by date and type
     const groupedByDate: Record<string, any> = {};
     
@@ -151,7 +168,7 @@ async function processDataWithTimeFrame(
           if (fromDate) {
             try {
               const fromDateObj = new Date(fromDate);
-              if (!isNaN(fromDateObj.getTime()) && fromDateObj > startDate) {
+              if (!isNaN(fromDateObj.getTime()) && fromDateObj < startDate) {
                 startDate = fromDateObj;
               }
             } catch (e) {
@@ -162,7 +179,7 @@ async function processDataWithTimeFrame(
           if (toDate) {
             try {
               const toDateObj = new Date(toDate);
-              if (!isNaN(toDateObj.getTime()) && toDateObj < endDate) {
+              if (!isNaN(toDateObj.getTime()) && toDateObj > endDate) {
                 endDate = toDateObj;
               }
             } catch (e) {
@@ -196,6 +213,24 @@ async function processDataWithTimeFrame(
               // Prevent infinite loop in case of error
               currentDate.setDate(currentDate.getDate() + 1);
             }
+          }
+        } else if (dates.length === 1 && !isSingleDayFilter) {
+          // If we only have one date point and it's not a single day filter, 
+          // add another point for the previous day
+          const singleDate = dates[0];
+          const previousDay = new Date(singleDate);
+          previousDay.setDate(previousDay.getDate() - 1);
+          
+          const previousDateStr = format(previousDay, 'yyyy-MM-dd');
+          if (!groupedByDate[previousDateStr]) {
+            groupedByDate[previousDateStr] = {
+              period: previousDateStr,
+              leads: 0,
+              clients: 0,
+              sessions: 0,
+              conversions: 0
+            };
+            console.log(`Added previous day ${previousDateStr} to ensure at least two data points`);
           }
         }
       } catch (error) {

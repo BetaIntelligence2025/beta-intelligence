@@ -16,6 +16,14 @@ export interface Event {
     phone: string;
     isClient: boolean;
     initialDeviceType: string;
+    initialUtmSource?: string;
+    initialUtmMedium?: string;
+    initialUtmCampaign?: string;
+    initialUtmContent?: string;
+    initialUtmTerm?: string;
+    initialCountry?: string;
+    initialRegion?: string;
+    initialCity?: string;
   };
   profession: {
     profession_name: string;
@@ -36,6 +44,28 @@ export interface Event {
     country: string;
     state: string;
     city: string;
+  };
+  // Direct UTM properties
+  utmSource?: string;
+  utmMedium?: string;
+  utmCampaign?: string;
+  utmContent?: string;
+  utmTerm?: string;
+  // Structured UTM data
+  utm_data?: {
+    utm_source: string;
+    utm_medium: string;
+    utm_campaign: string;
+    utm_content: string;
+    utm_term: string;
+  };
+  // Session UTMs from API
+  session_utms?: {
+    utm_source: string;
+    utm_medium: string;
+    utm_campaign: string;
+    utm_content: string;
+    utm_term: string;
   };
 }
 

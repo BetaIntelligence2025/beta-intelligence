@@ -28,7 +28,7 @@ const chartConfig = {
     color: "#1F2937"
   },
   clients: {
-    label: "Clientes",
+    label: "Connect Rate",
     color: "#4B5563"
   },
   sessions: {
@@ -36,7 +36,7 @@ const chartConfig = {
     color: "#6B7280"
   },
   conversions: {
-    label: "Conversões",
+    label: "Taxa de Conversão",
     color: "#9CA3AF"
   }
 } satisfies ChartConfig;
@@ -95,18 +95,6 @@ const MemoizedChart = memo(function Chart({
             />
             <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
               
-              {visibleDataKeys.includes('leads') && (
-                <Line 
-                  dataKey="leads" 
-                  type="monotone" 
-                  stroke={chartConfig.leads.color}
-                  strokeWidth={2} 
-                  connectNulls={true}
-                  dot={{ strokeWidth: 2, r: 2 }}
-                  activeDot={{ r: 4 }}
-                />
-              )}
-              
               {visibleDataKeys.includes('clients') && (
                 <Line 
                   dataKey="clients" 
@@ -125,6 +113,18 @@ const MemoizedChart = memo(function Chart({
                   type="monotone" 
                   stroke={chartConfig.sessions.color}
                   strokeWidth={2}
+                  connectNulls={true}
+                  dot={{ strokeWidth: 2, r: 2 }}
+                  activeDot={{ r: 4 }}
+                />
+              )}
+              
+              {visibleDataKeys.includes('leads') && (
+                <Line 
+                  dataKey="leads" 
+                  type="monotone" 
+                  stroke={chartConfig.leads.color}
+                  strokeWidth={2} 
                   connectNulls={true}
                   dot={{ strokeWidth: 2, r: 2 }}
                   activeDot={{ r: 4 }}
@@ -234,16 +234,16 @@ export default function VisualizationByPeriod(props: VisualizationByPeriodProps)
   
   // Filter which lines to show based on selectedCard
   const visibleDataKeys = useMemo(() => {
-    // Quando não há card selecionado, exibir todos os tipos
+    // Quando não há card selecionado, exibir todos os tipos exceto clients
     if (!selectedCard) {
-      return ['leads', 'clients', 'sessions', 'conversions'];
+      return ['clients', 'sessions', 'leads', 'conversions'];
     }
     
     // Map from singular to plural if needed
     const singularToPlural: Record<string, string> = {
-      'lead': 'leads',
       'client': 'clients',
       'session': 'sessions',
+      'lead': 'leads',
       'conversion': 'conversions'
     };
     

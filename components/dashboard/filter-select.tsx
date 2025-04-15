@@ -16,7 +16,7 @@ export function FilterSelect({ value, onValueChange }: FilterSelectProps) {
         <SelectItem value="all">Todos</SelectItem>
         <SelectItem value="users">Usuários</SelectItem>
         <SelectItem value="leads">Leads</SelectItem>
-        <SelectItem value="clients">Clientes</SelectItem>
+        <SelectItem value="clients">Connect Rate</SelectItem>
         <SelectItem value="anonymous">Anônimos</SelectItem>
       </SelectContent>
     </Select>

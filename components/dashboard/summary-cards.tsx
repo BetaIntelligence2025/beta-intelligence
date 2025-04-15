@@ -114,7 +114,7 @@ export default function SummaryCards({ onCardSelect, selectedCard, dateRange, da
       });
       
       // Calcular conversão
-      const conversionRate = leadsCount > 0 ? Math.round((clientsCount / leadsCount) * 100) : 0;
+      const conversionRate = sessionsCount > 0 ? Math.round((leadsCount / sessionsCount) * 100) : 0;
       
       // Período anterior (mock - na implementação real, você compararia com dados anteriores)
       // Em uma versão completa, você buscaria dados do período anterior para comparação
@@ -170,6 +170,78 @@ export default function SummaryCards({ onCardSelect, selectedCard, dateRange, da
       <div className="grid space-y-2 md:grid-cols-2 lg:grid-cols-4 lg:space-y-0">
         <Card 
           className={cn(
+            "rounded-none transition-all opacity-60 bg-gray-50 cursor-not-allowed",
+            (selectedCard || internalSelectedCard) === "clients" && "bg-gray-100 border-gray-300"
+          )}
+        >
+          <CardHeader className="relative flex flex-row items-center justify-between space-y-0">
+            <CardTitle className="font-medium">Connect Rate</CardTitle>
+            <div className="absolute end-4 top-4 flex size-12 items-end justify-start rounded-full bg-gray-100 p-4">
+              <UsersIcon className="size-5" />
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-1">
+            <div className="text-3xl font-bold">
+              {summaryData.isLoading ? (
+                <span>Carregando...</span>
+              ) : (
+                <>{summaryData.clients.count}%</>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {summaryData.isLoading ? (
+                <span>Calculando...</span>
+              ) : (
+                <span className={summaryData.clients.isPositive ? "text-green-600" : "text-red-600"}>
+                  {summaryData.clients.isPositive ? "+" : "-"}{summaryData.clients.percentage}%
+                </span>
+              )} do período anterior
+            </p>
+            <div className="mt-2 rounded bg-gray-50 px-2 py-1">
+              <p className="text-xs text-gray-400 italic">Funcionalidade em desenvolvimento</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card 
+          className={cn(
+            "rounded-none hover:bg-muted cursor-pointer transition-all",
+            (selectedCard || internalSelectedCard) === "sessions" && "bg-gray-100 border-gray-300"
+          )}
+          onClick={() => handleCardClick("sessions")}
+        >
+          <CardHeader className="relative flex flex-row items-center justify-between space-y-0">
+            <CardTitle className="font-medium">Sessões na Captação</CardTitle>
+            <div className="absolute end-4 top-4 flex size-12 items-end justify-start rounded-full bg-gray-100 p-4">
+              <Monitor className="size-5" />
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-1">
+            <div className="text-3xl font-bold">
+              {summaryData.isLoading ? (
+                <span>Carregando...</span>
+              ) : (
+                <CountAnimation number={summaryData.sessions.count} />
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {summaryData.isLoading ? (
+                <span>Calculando...</span>
+              ) : (
+                <span className={summaryData.sessions.isPositive ? "text-green-600" : "text-red-600"}>
+                  {summaryData.sessions.isPositive ? "+" : "-"}{summaryData.sessions.percentage}%
+                </span>
+              )} do período anterior
+            </p>
+            <div className="mt-2 rounded bg-gray-50 px-2 py-1">
+              <p className="text-xs font-medium">
+                <span className="mr-1 inline-block h-2 w-2 rounded-full bg-green-500"></span>
+                {isActiveSessionsLoading ? "Carregando..." : `${activeSessions} sessões ativas agora`}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card 
+          className={cn(
             "rounded hover:bg-muted cursor-pointer transition-all",
             (selectedCard || internalSelectedCard) === "leads" && "bg-gray-100 border-gray-300"
           )}
@@ -203,82 +275,12 @@ export default function SummaryCards({ onCardSelect, selectedCard, dateRange, da
         <Card 
           className={cn(
             "rounded-none hover:bg-muted cursor-pointer transition-all",
-            (selectedCard || internalSelectedCard) === "clients" && "bg-gray-100 border-gray-300"
-          )}
-          onClick={() => handleCardClick("clients")}
-        >
-          <CardHeader className="relative flex flex-row items-center justify-between space-y-0">
-            <CardTitle className="font-medium">Clientes</CardTitle>
-            <div className="absolute end-4 top-4 flex size-12 items-end justify-start rounded-full bg-gray-100 p-4">
-              <UsersIcon className="size-5" />
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-1">
-            <div className="text-3xl font-bold">
-              {summaryData.isLoading ? (
-                <span>Carregando...</span>
-              ) : (
-                <CountAnimation number={summaryData.clients.count} />
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {summaryData.isLoading ? (
-                <span>Calculando...</span>
-              ) : (
-                <span className={summaryData.clients.isPositive ? "text-green-600" : "text-red-600"}>
-                  {summaryData.clients.isPositive ? "+" : "-"}{summaryData.clients.percentage}%
-                </span>
-              )} do período anterior
-            </p>
-          </CardContent>
-        </Card>
-        <Card 
-          className={cn(
-            "rounded-none hover:bg-muted cursor-pointer transition-all",
-            (selectedCard || internalSelectedCard) === "sessions" && "bg-gray-100 border-gray-300"
-          )}
-          onClick={() => handleCardClick("sessions")}
-        >
-          <CardHeader className="relative flex flex-row items-center justify-between space-y-0">
-            <CardTitle className="font-medium">Sessões</CardTitle>
-            <div className="absolute end-4 top-4 flex size-12 items-end justify-start rounded-full bg-gray-100 p-4">
-              <Monitor className="size-5" />
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-1">
-            <div className="text-3xl font-bold">
-              {summaryData.isLoading ? (
-                <span>Carregando...</span>
-              ) : (
-                <CountAnimation number={summaryData.sessions.count} />
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {summaryData.isLoading ? (
-                <span>Calculando...</span>
-              ) : (
-                <span className={summaryData.sessions.isPositive ? "text-green-600" : "text-red-600"}>
-                  {summaryData.sessions.isPositive ? "+" : "-"}{summaryData.sessions.percentage}%
-                </span>
-              )} do período anterior
-            </p>
-            <div className="mt-2 rounded bg-gray-50 px-2 py-1">
-              <p className="text-xs font-medium">
-                <span className="mr-1 inline-block h-2 w-2 rounded-full bg-green-500"></span>
-                {isActiveSessionsLoading ? "Carregando..." : `${activeSessions} sessões ativas agora`}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card 
-          className={cn(
-            "rounded-none hover:bg-muted cursor-pointer transition-all",
             (selectedCard || internalSelectedCard) === "conversions" && "bg-gray-100 border-gray-300"
           )}
           onClick={() => handleCardClick("conversions")}
         >
           <CardHeader className="relative flex flex-row items-center justify-between space-y-0">
-            <CardTitle className="font-medium">Conversões</CardTitle>
+            <CardTitle className="font-medium">Taxa de Conversão</CardTitle>
             <div className="absolute end-4 top-4 flex size-12 items-end justify-start rounded-full bg-gray-100 p-4">
               <DollarSignIcon className="size-5" />
             </div>

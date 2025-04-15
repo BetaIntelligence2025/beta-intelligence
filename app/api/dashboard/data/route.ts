@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DashboardDataItem, TimeFrame } from '@/app/dashboard/types';
-import { API_BASE_URL } from '@/app/config/api';
+import { API_BASE_URL, API_ENDPOINTS } from '@/app/config/api';
 
 // Make cache dynamic based on request
 export const dynamic = 'force-dynamic';
@@ -8,6 +8,26 @@ export const dynamic = 'force-dynamic';
 // Configurações de timeout e cache
 const TIMEOUT_MS = 15000; // 15 segundos
 const CACHE_TTL = 60; // 1 minuto
+
+/**
+ * Função auxiliar para converter uma data para o formato UTC com timezone do Brasil
+ */
+function toBrazilianTimezone(dateString: string): string {
+  // Converter para objeto Date
+  const date = new Date(dateString);
+  // Converter para horário de Brasília
+  const brazilDate = new Date(date.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+  
+  // Formatar no padrão ISO com timezone -03:00
+  const year = brazilDate.getFullYear();
+  const month = String(brazilDate.getMonth() + 1).padStart(2, '0');
+  const day = String(brazilDate.getDate()).padStart(2, '0');
+  const hours = String(brazilDate.getHours()).padStart(2, '0');
+  const minutes = String(brazilDate.getMinutes()).padStart(2, '0');
+  const seconds = String(brazilDate.getSeconds()).padStart(2, '0');
+  
+  return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}-03:00`;
+}
 
 /**
  * GET handler for optimized dashboard data fetching
@@ -37,6 +57,15 @@ export async function GET(request: NextRequest) {
       to = `${year}-${month}-${day}T23:59:59-03:00`;
       
       console.log('Usando data padrão (hoje) para dashboard:', { from, to });
+    } else {
+      // Garantir que as datas fornecidas estejam no timezone do Brasil
+      try {
+        if (from) from = toBrazilianTimezone(from).split('T')[0] + 'T00:00:00-03:00';
+        if (to) to = toBrazilianTimezone(to).split('T')[0] + 'T23:59:59-03:00';
+      } catch (e) {
+        console.error('Erro ao converter datas para timezone do Brasil:', e);
+        // Manter as datas originais se houver erro
+      }
     }
     
     // Build query params
@@ -63,61 +92,92 @@ export async function GET(request: NextRequest) {
     // Determine which endpoints to call based on card type
     let sessionUrl: string | undefined;
     let leadUrl: string | undefined;
-    let clientUrl: string | undefined;
+    
+    // Adicionar filtro de landing page para sessões
+    const sessionParams = { ...params, landing_page: 'lp.vagasjustica.com.br' };
+    
+    // Adicionar filtro para buscar leads da tabela de eventos
+    // Formato específico para busca de leads: count_only=true&from=X&to=Y&period=true&event_type=LEAD
+    const leadParams = { 
+      count_only: 'true',
+      from: from || '',
+      to: to || '',
+      period: 'true',
+      event_type: 'LEAD'
+    };
     
     if (normalizedCardType) {
       switch (normalizedCardType) {
         case 'sessions':
-          sessionUrl = `${API_BASE_URL}/session/?${new URLSearchParams(params)}`;
+          sessionUrl = `${API_BASE_URL}/session/?${new URLSearchParams(sessionParams)}`;
           break;
         case 'leads':
-          leadUrl = `${API_BASE_URL}/lead/?${new URLSearchParams(params)}`;
+          // Agora busca em /events com formato específico
+          const leadsSearchParams = new URLSearchParams();
+          // Adicionar apenas parâmetros não vazios
+          for (const [key, value] of Object.entries(leadParams)) {
+            if (value) leadsSearchParams.append(key, value);
+          }
+          leadUrl = `${API_ENDPOINTS.EVENTS}/?${leadsSearchParams.toString()}`;
+          console.log(`Lead URL (events): ${leadUrl}`);
           break;
         case 'clients':
-          clientUrl = `${API_BASE_URL}/client/?${new URLSearchParams(params)}`;
+          // Não buscar dados de clients (Connect Rate)
           break;
         case 'conversions':
-          // Conversions requires both leads and clients data
-          leadUrl = `${API_BASE_URL}/lead/?${new URLSearchParams(params)}`;
-          clientUrl = `${API_BASE_URL}/client/?${new URLSearchParams(params)}`;
+          // Conversions requires only sessions and leads data now
+          sessionUrl = `${API_BASE_URL}/session/?${new URLSearchParams(sessionParams)}`;
+          // Agora busca em /events com formato específico
+          const convLeadsSearchParams = new URLSearchParams();
+          // Adicionar apenas parâmetros não vazios
+          for (const [key, value] of Object.entries(leadParams)) {
+            if (value) convLeadsSearchParams.append(key, value);
+          }
+          leadUrl = `${API_ENDPOINTS.EVENTS}/?${convLeadsSearchParams.toString()}`;
+          console.log(`Conversion Lead URL (events): ${leadUrl}`);
           break;
       }
     } else {
-      // If no specific card, we need all data
-      sessionUrl = `${API_BASE_URL}/session/?${new URLSearchParams(params)}`;
-      leadUrl = `${API_BASE_URL}/lead/?${new URLSearchParams(params)}`;
-      clientUrl = `${API_BASE_URL}/client/?${new URLSearchParams(params)}`;
+      // If no specific card, we need data except clients
+      sessionUrl = `${API_BASE_URL}/session/?${new URLSearchParams(sessionParams)}`;
+      // Agora busca em /events com formato específico
+      const allLeadsSearchParams = new URLSearchParams();
+      // Adicionar apenas parâmetros não vazios
+      for (const [key, value] of Object.entries(leadParams)) {
+        if (value) allLeadsSearchParams.append(key, value);
+      }
+      leadUrl = `${API_ENDPOINTS.EVENTS}/?${allLeadsSearchParams.toString()}`;
+      console.log(`All Lead URL (events): ${leadUrl}`);
+      // Não buscar dados de clients (Connect Rate)
     }
     
     try {
       // Fetch all data in parallel with timeout
       const results = await Promise.all([
         sessionUrl ? fetchApiData(sessionUrl, 'sessions') : Promise.resolve([]),
-        leadUrl ? fetchApiData(leadUrl, 'leads') : Promise.resolve([]),
-        clientUrl ? fetchApiData(clientUrl, 'clients') : Promise.resolve([])
+        leadUrl ? fetchApiData(leadUrl, 'leads') : Promise.resolve([])
       ]);
       
       const sessionData = results[0];
       const leadData = results[1];
-      const clientData = results[2];
       
-      // Generate conversion data if we have both leads and clients
+      // Generate conversion data if we have both leads and sessions
       let conversionData: DashboardDataItem[] = [];
-      if (leadData.length > 0 && clientData.length > 0) {
+      if (leadData.length > 0 && sessionData.length > 0) {
         // Get all unique dates
         const dates = Array.from(new Set([
           ...leadData.map(item => item.date),
-          ...clientData.map(item => item.date)
+          ...sessionData.map(item => item.date)
         ]));
         
         // Calculate conversions for each date
         conversionData = dates.map(date => {
           const leadsForDate = leadData.find(item => item.date === date)?.count || 0;
-          const clientsForDate = clientData.find(item => item.date === date)?.count || 0;
+          const sessionsForDate = sessionData.find(item => item.date === date)?.count || 0;
           
-          // Conversion is the percentage of leads that became clients
-          const conversionRate = leadsForDate > 0 
-            ? (clientsForDate / leadsForDate) * 100 
+          // Conversion is the percentage of sessions that became leads
+          const conversionRate = sessionsForDate > 0 
+            ? (leadsForDate / sessionsForDate) * 100 
             : 0;
           
           return {
@@ -132,7 +192,6 @@ export async function GET(request: NextRequest) {
       const combinedData = [
         ...sessionData,
         ...leadData,
-        ...clientData,
         ...conversionData
       ];
       
@@ -187,6 +246,8 @@ async function fetchApiData(url: string, type: string): Promise<DashboardDataIte
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
+    console.log(`Fetching data from: ${url} for type: ${type}`);
+
     const response = await fetch(url, { 
       signal: controller.signal,
       headers: {
@@ -205,6 +266,91 @@ async function fetchApiData(url: string, type: string): Promise<DashboardDataIte
     }
     
     const data = await response.json();
+    
+    // Verifica se estamos lidando com dados da API de eventos (para leads)
+    if (url.includes(API_ENDPOINTS.EVENTS) && type === 'leads') {
+      console.log(`Processing events data as leads. Data structure:`, typeof data, Array.isArray(data) ? 'array' : 'not-array', data.events ? 'has events property' : 'no events property');
+      
+      // Se for um array, extrair e converter eventos para o formato de leads
+      if (data && Array.isArray(data)) {
+        console.log(`Data is an array with ${data.length} events`);
+        return data.map(event => {
+          // Extrair data e converter para timezone do Brasil
+          const eventDate = event.created_at || event.date;
+          const brazilianDate = toBrazilianTimezone(eventDate).split('T')[0]; // Pegar apenas a parte da data
+          
+          return {
+            date: brazilianDate,
+            count: 1,
+            type: 'leads'
+          };
+        });
+      } 
+      // Se for objeto com formato de períodos
+      else if (data && typeof data === 'object' && data.periods) {
+        console.log(`Data has periods property with ${Object.keys(data.periods).length} periods`);
+        const entries = Object.entries(data.periods);
+        
+        return entries.map(([date, count]) => ({
+          date,
+          count: Number(count) || 0, // Garante que seja number
+          type: 'leads'
+        }));
+      }
+      // Se for objeto com propriedade events contendo um array
+      else if (data && typeof data === 'object' && Array.isArray(data.events)) {
+        console.log(`Data has events array with ${data.events.length} events`);
+        // Agrupar eventos por data
+        const eventsByDate: Record<string, number> = data.events.reduce((acc: Record<string, number>, event: any) => {
+          // Extrair a data e convertê-la para timezone do Brasil
+          const eventDate = event.created_at || event.date;
+          const brazilianDate = toBrazilianTimezone(eventDate).split('T')[0]; // Pegar apenas a parte da data
+          
+          acc[brazilianDate] = (acc[brazilianDate] || 0) + 1;
+          return acc;
+        }, {});
+        
+        // Converter o agrupamento para o formato esperado
+        return Object.entries(eventsByDate).map(([date, count]) => ({
+          date,
+          count: count,
+          type: 'leads'
+        })) as DashboardDataItem[];
+      }
+      // Último caso - objeto com lista de eventos com estrutura específica
+      else if (data && typeof data === 'object') {
+        console.log(`Processing data as general object`);
+        try {
+          // Tenta extrair eventos
+          const events = data.data || data.events || data.items || [];
+          
+          if (Array.isArray(events) && events.length > 0) {
+            console.log(`Found ${events.length} events in data`);
+            // Agrupar eventos por data
+            const eventsByDate: Record<string, number> = events.reduce((acc: Record<string, number>, event: any) => {
+              // Extrair a data do evento com fallbacks para vários formatos possíveis
+              const eventDate = event.created_at || event.date || event.timestamp || new Date().toISOString();
+              const brazilianDate = toBrazilianTimezone(eventDate).split('T')[0]; // Pegar apenas a parte da data
+              
+              acc[brazilianDate] = (acc[brazilianDate] || 0) + 1;
+              return acc;
+            }, {});
+            
+            // Converter o agrupamento para o formato esperado
+            return Object.entries(eventsByDate).map(([date, count]) => ({
+              date,
+              count: count,
+              type: 'leads'
+            })) as DashboardDataItem[];
+          }
+        } catch (e) {
+          console.error('Error processing events data:', e);
+        }
+      }
+      
+      console.warn('Could not process events data in any known format');
+      return [];
+    }
     
     if (data && Array.isArray(data)) {
       // Map the API data to our format

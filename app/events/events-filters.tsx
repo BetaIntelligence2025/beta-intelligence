@@ -1118,7 +1118,7 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
             <h3 className="text-sm font-medium mb-4">Use filtros avançados para encontrar eventos específicos</h3>
             
             {pendingAdvancedFilters.map((filter, index) => (
-              <div key={filter.id} className="mb-4 space-y-3">
+              <div key={filter.id} className="mb-6 space-y-3 border-b pb-4 last:border-b-0">
                 {index > 0 && (
                   <div className="flex items-center justify-start my-2">
                     <div className="text-sm font-medium text-center px-4 py-1 bg-gray-100 rounded-md">
@@ -1128,16 +1128,16 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
                 )}
                 
                 <div className="grid grid-cols-12 gap-2">
-                  <div className="col-span-5">
+                  <div className="col-span-5 md:col-span-4">
                     <Label className="text-xs mb-1 block">Propriedade</Label>
                     <Select
                       value={filter.property}
                       onValueChange={(value) => handleAdvancedFilterChange(index, 'property', value)}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger className="text-ellipsis overflow-hidden whitespace-nowrap">
                         <SelectValue placeholder="Selecione" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="max-h-[300px]">
                         {columns
                           // Removemos a opção de data do filtro avançado pois já existe um filtro específico para datas
                           .filter(column => column.accessorKey !== 'event_time')
@@ -1150,16 +1150,16 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
                     </Select>
                   </div>
                   
-                  <div className="col-span-3">
+                  <div className="col-span-3 md:col-span-3">
                     <Label className="text-xs mb-1 block">Operador</Label>
                     <Select
                       value={filter.operator}
                       onValueChange={(value) => handleAdvancedFilterChange(index, 'operator', value)}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger className="text-ellipsis overflow-hidden whitespace-nowrap">
                         <SelectValue placeholder="Operador" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="max-h-[300px]">
                         <SelectItem value="equals">igual a</SelectItem>
                         <SelectItem value="contains">contém</SelectItem>
                         <SelectItem value="not_contains">não contém</SelectItem>
@@ -1168,7 +1168,7 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
                     </Select>
                   </div>
                   
-                  <div className="col-span-3">
+                  <div className="col-span-3 md:col-span-4">
                     <Label className="text-xs mb-1 block">Valor</Label>
                     {filter.property === "event_type" ? (
                       <Select
@@ -1178,7 +1178,7 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
                         <SelectTrigger>
                           <SelectValue placeholder="Selecione um Evento" />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent className="max-h-[300px]">
                           <SelectItem value="LEAD">LEAD</SelectItem>
                           <SelectItem value="INITIATE_CHECKOUT">INITIATE_CHECKOUT</SelectItem>
                           <SelectItem value="ADD_PAYMENT_INFO">ADD_PAYMENT_INFO</SelectItem>
@@ -1195,7 +1195,7 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
                         <SelectTrigger>
                           <SelectValue placeholder="Selecione um Dispositivo" />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent className="max-h-[300px]">
                           <SelectItem value="desktop">Desktop</SelectItem>
                           <SelectItem value="mobile">Mobile</SelectItem>
                           <SelectItem value="tablet">Tablet</SelectItem>
@@ -1209,6 +1209,7 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
                           onChange={(e) => handleAdvancedFilterChange(index, 'value', e.target.value)}
                           placeholder="Valor"
                           className={filter.value ? "pr-8" : ""}
+                          style={{ minWidth: '0', width: '100%' }}
                         />
                         {filter.value && (
                           <Button
@@ -1417,17 +1418,17 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
 
       {/* Modal de Filtros Avançados */}
       <Dialog open={advancedFilterOpen} onOpenChange={setAdvancedFilterOpen}>
-        <DialogContent className="sm:max-w-[5Z0px]">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-[650px] max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>Filtros Avançados</DialogTitle>
             <DialogDescription>
               Use filtros avançados para encontrar eventos específicos com base em qualquer propriedade.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="py-4 max-h-[60vh] overflow-y-auto px-2">
+          <div className="py-4 overflow-y-auto px-2 flex-grow">
             {pendingAdvancedFilters.map((filter, index) => (
-              <div key={filter.id} className="mb-4 space-y-3">
+              <div key={filter.id} className="mb-6 space-y-3 border-b pb-4 last:border-b-0">
                 {index > 0 && (
                   <div className="flex items-center justify-start my-2">
                     <div className="text-sm font-medium text-center px-4 py-1 bg-gray-100 rounded-md">
@@ -1437,16 +1438,16 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
                 )}
                 
                 <div className="grid grid-cols-12 gap-2">
-                  <div className="col-span-5">
+                  <div className="col-span-5 md:col-span-4">
                     <Label className="text-xs mb-1 block">Propriedade</Label>
                     <Select
                       value={filter.property}
                       onValueChange={(value) => handleAdvancedFilterChange(index, 'property', value)}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger className="text-ellipsis overflow-hidden whitespace-nowrap">
                         <SelectValue placeholder="Selecione" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="max-h-[300px]">
                         {columns
                           // Removemos a opção de data do filtro avançado pois já existe um filtro específico para datas
                           .filter(column => column.accessorKey !== 'event_time')
@@ -1459,16 +1460,16 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
                     </Select>
                   </div>
                   
-                  <div className="col-span-3">
+                  <div className="col-span-3 md:col-span-3">
                     <Label className="text-xs mb-1 block">Operador</Label>
                     <Select
                       value={filter.operator}
                       onValueChange={(value) => handleAdvancedFilterChange(index, 'operator', value)}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger className="text-ellipsis overflow-hidden whitespace-nowrap">
                         <SelectValue placeholder="Operador" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="max-h-[300px]">
                         <SelectItem value="equals">igual a</SelectItem>
                         <SelectItem value="contains">contém</SelectItem>
                         <SelectItem value="not_contains">não contém</SelectItem>
@@ -1477,7 +1478,7 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
                     </Select>
                   </div>
                   
-                  <div className="col-span-3">
+                  <div className="col-span-3 md:col-span-4">
                     <Label className="text-xs mb-1 block">Valor</Label>
                     {filter.property === "event_type" ? (
                       <Select
@@ -1487,7 +1488,7 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
                         <SelectTrigger>
                           <SelectValue placeholder="Selecione um Evento" />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent className="max-h-[300px]">
                           <SelectItem value="LEAD">LEAD</SelectItem>
                           <SelectItem value="INITIATE_CHECKOUT">INITIATE_CHECKOUT</SelectItem>
                           <SelectItem value="ADD_PAYMENT_INFO">ADD_PAYMENT_INFO</SelectItem>
@@ -1504,7 +1505,7 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
                         <SelectTrigger>
                           <SelectValue placeholder="Selecione um Dispositivo" />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent className="max-h-[300px]">
                           <SelectItem value="desktop">Desktop</SelectItem>
                           <SelectItem value="mobile">Mobile</SelectItem>
                           <SelectItem value="tablet">Tablet</SelectItem>
@@ -1518,6 +1519,7 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
                           onChange={(e) => handleAdvancedFilterChange(index, 'value', e.target.value)}
                           placeholder="Valor"
                           className={filter.value ? "pr-8" : ""}
+                          style={{ minWidth: '0', width: '100%' }}
                         />
                         {filter.value && (
                           <Button
@@ -1590,7 +1592,7 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
             </div>
           </div>
 
-          <DialogFooter className="flex justify-between">
+          <DialogFooter className="flex justify-between flex-shrink-0 border-t pt-2">
             <div className="flex items-center">
               <Button
                 variant="outline"

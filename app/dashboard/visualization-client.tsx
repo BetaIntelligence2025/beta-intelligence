@@ -36,7 +36,7 @@ const chartConfig = {
     color: "#6B7280"
   },
   conversions: {
-    label: "Taxa de Conversão",
+    label: "Conversão da Captação",
     color: "#9CA3AF"
   }
 } satisfies ChartConfig;
@@ -156,8 +156,14 @@ export default function VisualizationByPeriod(props: VisualizationByPeriodProps)
     dashboardData
   } = props;
   
-  // Remove the key-based render forcing that was causing issues
-  const [timeFrame, setTimeFrame] = useState<TimeFrame>("Daily");
+  // Get timeFrame from URL search params if available, otherwise default to "Daily"
+  const [searchParams] = useState(() => new URLSearchParams(
+    typeof window !== 'undefined' ? window.location.search : ''
+  ));
+  const defaultTimeFrame = searchParams.get('timeFrame') as TimeFrame || "Daily";
+  
+  // Initialize with value from URL params
+  const [timeFrame, setTimeFrame] = useState<TimeFrame>(defaultTimeFrame);
   const [isLoading, setIsLoading] = useState(true);
   const [periodData, setPeriodData] = useState<DashboardDataItem[]>([]);
   const [chartData, setChartData] = useState<any[]>([]);
@@ -254,8 +260,87 @@ export default function VisualizationByPeriod(props: VisualizationByPeriodProps)
   
   // Handler for timeframe changes without forcing full re-render
   function handleTimeFrameChange(value: string) {
+    // Update local state
     setTimeFrame(value as TimeFrame);
     setError(null);
+    
+    // Update URL params to include the timeFrame
+    const params = new URLSearchParams(window.location.search);
+    params.set('timeFrame', value);
+    
+    // Use history.replaceState to update URL without page reload
+    window.history.replaceState(
+      {},
+      '',
+      `${window.location.pathname}?${params.toString()}`
+    );
+    
+    // Trigger immediate data refresh
+    if (periodData && periodData.length > 0) {
+      processChartData(periodData, value as TimeFrame);
+    }
+  }
+  
+  // Separate the processing logic into a reusable function
+  async function processChartData(data: DashboardDataItem[], currentTimeFrame: TimeFrame) {
+    try {
+      console.log('Processing chart data with timeframe:', currentTimeFrame);
+      setIsLoading(true);
+      
+      // Set a timeout that will trigger if the request takes too long
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Tempo limite excedido ao carregar dados')), 35000);
+      });
+      
+      // The actual API call
+      const fetchPromise = fetch('/api/dashboard/process', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          data: data,
+          timeFrame: currentTimeFrame,
+          dateRange: dateRange && dateRange.from && dateRange.to 
+            ? { 
+                from: dateRange.from.toISOString(), 
+                to: dateRange.to.toISOString() 
+              } 
+            : null
+        })
+      });
+      
+      // Race between the timeout and the fetch
+      const response = await Promise.race([fetchPromise, timeoutPromise]) as Response;
+      
+      if (!response.ok) {
+        throw new Error(`API respondeu com erro ${response.status}`);
+      }
+      
+      const processedData = await response.json();
+      
+      if (isMounted.current) {
+        console.log('Setting chart data:', processedData.length, 'items');
+        setChartData(processedData);
+        setIsLoading(false);
+      }
+    } catch (error) {
+      console.error('Error processing chart data:', error);
+      if (isMounted.current) {
+        let errorMessage = 'Erro ao processar dados';
+        
+        if (error instanceof Error) {
+          if (error.message.includes('tempo limite') || error.message.includes('timeout')) {
+            errorMessage = 'Tempo limite excedido. A API está demorando para responder.';
+          } else {
+            errorMessage = error.message;
+          }
+        }
+        
+        setError(errorMessage);
+        setIsLoading(false);
+      }
+    }
   }
   
   // First effect to handle dashboardData updates
@@ -282,50 +367,14 @@ export default function VisualizationByPeriod(props: VisualizationByPeriodProps)
     }
     
     let isCancelled = false;
-    setIsLoading(true);
     
-    async function processChartData() {
-      try {
-        console.log('Processing chart data with timeframe:', timeFrame);
-        
-        const response = await fetch('/api/dashboard/process', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            data: periodData,
-            timeFrame,
-            dateRange: dateRange && dateRange.from && dateRange.to 
-              ? { 
-                  from: dateRange.from.toISOString(), 
-                  to: dateRange.to.toISOString() 
-                } 
-              : null
-          })
-        });
-        
-        if (!response.ok) {
-          throw new Error(`API responded with status ${response.status}`);
-        }
-        
-        const processedData = await response.json();
-        
-        if (!isCancelled && isMounted.current) {
-          console.log('Setting chart data:', processedData.length, 'items');
-          setChartData(processedData);
-          setIsLoading(false);
-        }
-      } catch (error) {
-        console.error('Error processing chart data:', error);
-        if (!isCancelled && isMounted.current) {
-          setError(error instanceof Error ? error.message : 'Error processing data');
-          setIsLoading(false);
-        }
+    const processData = async () => {
+      if (!isCancelled) {
+        await processChartData(periodData, timeFrame);
       }
-    }
+    };
     
-    processChartData();
+    processData();
     
     return () => {
       isCancelled = true;
@@ -339,17 +388,29 @@ export default function VisualizationByPeriod(props: VisualizationByPeriodProps)
     let isCancelled = false;
     setIsLoading(true);
     
-    async function fetchData() {
+    async function fetchData(retryCount = 0) {
       try {
         const params = new URLSearchParams();
         if (dateRange?.from) params.append('from', dateRange.from.toISOString());
         if (dateRange?.to) params.append('to', dateRange.to.toISOString());
         if (selectedCard) params.append('cardType', selectedCard);
+        params.append('timeFrame', timeFrame);
         
-        const response = await fetch(`/api/dashboard/data?${params.toString()}`);
+        // Add a cache-busting parameter to prevent stale data
+        params.append('_t', Date.now().toString());
+        
+        console.log(`Fetching dashboard data with timeFrame: ${timeFrame}`);
+        
+        // Create a timeout promise that rejects after 35 seconds
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Tempo limite excedido ao carregar dados')), 35000);
+        });
+        
+        const fetchPromise = fetch(`/api/dashboard/data?${params.toString()}`);
+        const response = await Promise.race([fetchPromise, timeoutPromise]) as Response;
         
         if (!response.ok) {
-          throw new Error(`API responded with status ${response.status}`);
+          throw new Error(`API respondeu com erro ${response.status}`);
         }
         
         const data = await response.json();
@@ -359,8 +420,26 @@ export default function VisualizationByPeriod(props: VisualizationByPeriodProps)
         }
       } catch (error) {
         console.error('Error fetching data:', error);
+        
+        // Retry logic - maximum 2 retries (total 3 attempts)
+        if (retryCount < 2 && !isCancelled) {
+          console.log(`Retrying fetch (attempt ${retryCount + 2}/3)...`);
+          setTimeout(() => fetchData(retryCount + 1), 2000); // Wait 2 seconds before retry
+          return;
+        }
+        
         if (!isCancelled && isMounted.current) {
-          setError(error instanceof Error ? error.message : 'Error fetching data');
+          let errorMessage = 'Erro ao buscar dados';
+          
+          if (error instanceof Error) {
+            if (error.message.includes('tempo limite') || error.message.includes('timeout')) {
+              errorMessage = 'Tempo limite excedido. A API está demorando para responder.';
+            } else {
+              errorMessage = error.message;
+            }
+          }
+          
+          setError(errorMessage);
           setIsLoading(false);
         }
       }
@@ -371,7 +450,25 @@ export default function VisualizationByPeriod(props: VisualizationByPeriodProps)
     return () => {
       isCancelled = true;
     };
-  }, [dateRange, selectedCard, dashboardData]);
+  }, [dateRange, selectedCard, dashboardData, timeFrame]);
+  
+  // Synchronize with URL changes
+  useEffect(() => {
+    const handleUrlChange = () => {
+      const newParams = new URLSearchParams(window.location.search);
+      const newTimeFrame = newParams.get('timeFrame') as TimeFrame;
+      if (newTimeFrame && newTimeFrame !== timeFrame) {
+        setTimeFrame(newTimeFrame);
+      }
+    };
+
+    // Listen for popstate events (when user navigates back/forward)
+    window.addEventListener('popstate', handleUrlChange);
+
+    return () => {
+      window.removeEventListener('popstate', handleUrlChange);
+    };
+  }, [timeFrame]);
   
   // Create the appropriate display value for the selected timeframe
   const timeFrameDisplay = {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { format, parse, parseISO } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import { DashboardDataItem, TimeFrame } from '@/app/dashboard/types';
 
 interface DateRange {
@@ -265,6 +266,66 @@ async function processDataWithTimeFrame(
       console.error('Error sorting by date:', e);
     }
     
+    // Group data by week, month, or year if needed
+    if (timeFrame !== "Daily") {
+      try {
+        // Create a map to hold our aggregated data
+        const aggregatedData: Record<string, any> = {};
+        
+        for (const item of processedData) {
+          try {
+            const dateObj = parseISO(item.period);
+            let groupKey: string;
+            
+            // Determine the key based on time frame
+            if (timeFrame === "Weekly") {
+              // Get the Monday of the week
+              const weekStart = new Date(dateObj);
+              weekStart.setDate(dateObj.getDate() - dateObj.getDay() + 1); // Monday
+              groupKey = format(weekStart, 'yyyy-MM-dd');
+            } else if (timeFrame === "Monthly") {
+              // Group by year and month
+              groupKey = format(dateObj, 'yyyy-MM');
+            } else { // Yearly
+              // Group by year
+              groupKey = format(dateObj, 'yyyy');
+            }
+            
+            // Initialize group if it doesn't exist
+            if (!aggregatedData[groupKey]) {
+              aggregatedData[groupKey] = {
+                period: groupKey,
+                leads: 0,
+                clients: 0,
+                sessions: 0,
+                conversions: 0
+              };
+            }
+            
+            // Add the data to the group
+            aggregatedData[groupKey].leads += item.leads || 0;
+            aggregatedData[groupKey].clients += item.clients || 0;
+            aggregatedData[groupKey].sessions += item.sessions || 0;
+            aggregatedData[groupKey].conversions += item.conversions || 0;
+            
+          } catch (e) {
+            console.error('Error aggregating item:', e, item);
+          }
+        }
+        
+        // Convert back to array and sort by date
+        processedData = Object.values(aggregatedData).sort((a, b) => {
+          const dateA = new Date(a.period);
+          const dateB = new Date(b.period);
+          return dateA.getTime() - dateB.getTime();
+        });
+        
+        console.log(`Aggregated data to ${processedData.length} ${timeFrame.toLowerCase()} data points`);
+      } catch (e) {
+        console.error(`Error aggregating data by ${timeFrame}:`, e);
+      }
+    }
+    
     // Apply date formatting based on timeframe
     try {
       processedData = processedData.map(item => {
@@ -295,7 +356,7 @@ async function processDataWithTimeFrame(
               break;
             case "Monthly":
               try {
-                formattedPeriod = format(dateObj, 'MMM yyyy');
+                formattedPeriod = format(dateObj, 'MMM yyyy', { locale: ptBR });
               } catch (e) {
                 formattedPeriod = item.period; // Fallback to original
               }
@@ -342,8 +403,8 @@ async function processDataWithTimeFrame(
           }
           // For monthly, we'll parse MMM yyyy
           else if (timeFrame === "Monthly") {
-            const dateA = parse(a.period, 'MMM yyyy', new Date());
-            const dateB = parse(b.period, 'MMM yyyy', new Date());
+            const dateA = parse(a.period, 'MMM yyyy', new Date(), { locale: ptBR });
+            const dateB = parse(b.period, 'MMM yyyy', new Date(), { locale: ptBR });
             return dateA.getTime() - dateB.getTime();
           }
           // For yearly, just compare years

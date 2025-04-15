@@ -11,7 +11,8 @@ export async function GET(request: NextRequest) {
     
     // Construir parâmetros para a API
     const params: Record<string, string> = { 
-      active: 'true'
+      active: 'true',
+      landingPage: 'lp.vagasjustica.com.br'
     }
     
     // Adicionar filtros de data se fornecidos

@@ -280,7 +280,7 @@ export default function SummaryCards({ onCardSelect, selectedCard, dateRange, da
           onClick={() => handleCardClick("conversions")}
         >
           <CardHeader className="relative flex flex-row items-center justify-between space-y-0">
-            <CardTitle className="font-medium">Taxa de Conversão</CardTitle>
+            <CardTitle className="font-medium">Conversão da Captação</CardTitle>
             <div className="absolute end-4 top-4 flex size-12 items-end justify-start rounded-full bg-gray-100 p-4">
               <DollarSignIcon className="size-5" />
             </div>

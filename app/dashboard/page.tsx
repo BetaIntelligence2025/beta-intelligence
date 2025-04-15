@@ -31,10 +31,22 @@ export default function Dashboard() {
   // Parse date range from search params if it exists - usando useMemo para evitar recriação do objeto
   const dateRange = useMemo(() => {
     const fromParam = searchParams.get('from');
+    const timeFromParam = searchParams.get('time_from');
+    const timeToParam = searchParams.get('time_to');
+    
+    console.log('Dashboard Page - Parâmetros da URL:', {
+      from: fromParam,
+      to: searchParams.get('to'),
+      time_from: timeFromParam,
+      time_to: timeToParam
+    });
+    
     if (fromParam) {
       return {
         from: fromParam,
-        to: searchParams.get('to') || fromParam
+        to: searchParams.get('to') || fromParam,
+        time_from: timeFromParam,
+        time_to: timeToParam
       };
     }
     return null;
@@ -115,6 +127,16 @@ export default function Dashboard() {
       if (dateRange) {
         params.set('from', dateRange.from);
         params.set('to', dateRange.to);
+        if (dateRange.time_from) params.set('time_from', dateRange.time_from);
+        if (dateRange.time_to) params.set('time_to', dateRange.time_to);
+        params.set('landingPage', 'lp.vagasjustica.com.br');
+        
+        console.log('Dashboard Page - Enviando parâmetros para API:', {
+          from: dateRange.from,
+          to: dateRange.to,
+          time_from: dateRange.time_from,
+          time_to: dateRange.time_to
+        });
       }
       
       // Add cache busting parameter

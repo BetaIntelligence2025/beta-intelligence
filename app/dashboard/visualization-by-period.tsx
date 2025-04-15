@@ -36,7 +36,7 @@ const chartConfig = {
     color: "#6B7280"
   },
   conversions: {
-    label: "Taxa de Conversão",
+    label: "Conversão da Captação",
     color: "#9CA3AF"
   }
 } satisfies ChartConfig;

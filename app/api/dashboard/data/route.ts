@@ -57,22 +57,13 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     
-    // Log completo dos parâmetros recebidos da requisição
-    console.log('Dashboard Data API - Parâmetros recebidos:', {
-      from: searchParams.get('from'),
-      to: searchParams.get('to'),
-      time_from: searchParams.get('time_from'),
-      time_to: searchParams.get('time_to'),
-      timeFrame: searchParams.get('timeFrame'),
-      cardType: searchParams.get('cardType'),
-      landingPage: searchParams.get('landingPage')
-    });
-    
     // Get specific parameters
     let from = searchParams.get('from');
     let to = searchParams.get('to');
     const timeFrame = (searchParams.get('timeFrame') || 'Daily') as TimeFrame;
     const cardType = searchParams.get('cardType') || null;
+    const professionId = searchParams.get('profession_id') || null;
+    const funnelId = searchParams.get('funnel_id') || null;
     
     // Se não tiver datas, usar o dia atual no horário de Brasília
     if (!from || !to) {
@@ -87,8 +78,6 @@ export async function GET(request: NextRequest) {
       // Definir horários padrão (início e fim do dia)
       const timeFrom = formatTimeToHHMM(new Date(brazilDate.setHours(0, 0, 0, 0)));
       const timeTo = formatTimeToHHMM(new Date(brazilDate.setHours(23, 59, 59, 999)));
-      
-      console.log('Usando data padrão (hoje) para dashboard:', { from, to, timeFrom, timeTo });
     } else {
       // Garantir que as datas fornecidas estejam no formato correto
       try {
@@ -101,7 +90,6 @@ export async function GET(request: NextRequest) {
           to = formatDateToISO(toDate);
         }
       } catch (e) {
-        console.error('Erro ao converter datas para formato ISO:', e);
         // Manter as datas originais se houver erro
       }
     }
@@ -138,14 +126,43 @@ export async function GET(request: NextRequest) {
     let sessionUrl: string | undefined;
     let leadUrl: string | undefined;
     
-    // Adicionar filtro de landing page para sessões
-    const sessionParams = { 
-      ...params
+    // Use the correct session endpoint (SESSION) from API_ENDPOINTS
+    // Note: This is using the singular form - /session
+    const sessionParams: Record<string, string> = { 
+      count_only: 'true', // Always include count_only for dashboard data
+      period: 'true',     // Include period=true to get data grouped by days
+      landingPage: 'lp.vagasjustica.com.br'  // Ensure landingPage parameter is included for sessions
     };
+    
+    // Add date parameters
+    if (from) sessionParams.from = from;
+    if (to) sessionParams.to = to;
+    if (timeFrom) sessionParams.time_from = timeFrom;
+    if (timeTo) sessionParams.time_to = timeTo;
+    
+    // Use all_data if no date range is provided
+    if (useAllData) {
+      sessionParams.all_data = 'true';
+      // Remove date params if using all_data
+      delete sessionParams.from;
+      delete sessionParams.to;
+    }
+    
+    // Add profession_id and funnel_id to session params if provided
+    if (professionId) {
+      sessionParams.profession_id = professionId;
+    }
+    
+    if (funnelId) {
+      sessionParams.funnel_id = funnelId;
+    }
+    
+    // Use session params when building session URL - Using API_ENDPOINTS.SESSION for consistent formatting
+    sessionUrl = `${API_ENDPOINTS.SESSION}?${new URLSearchParams(sessionParams).toString()}`;
     
     // Adicionar filtro para buscar leads da tabela de eventos
     // Formato específico para busca de leads com horários
-    const leadParams = { 
+    const leadParams: Record<string, string> = { 
       count_only: 'true',
       from: from || '',
       to: to || '',
@@ -155,10 +172,19 @@ export async function GET(request: NextRequest) {
       event_type: 'LEAD'
     };
     
+    // Add profession_id or funnel_id to lead params if provided
+    if (professionId) {
+      leadParams.profession_id = professionId;
+    }
+    
+    if (funnelId) {
+      leadParams.funnel_id = funnelId;
+    }
+    
     if (normalizedCardType) {
       switch (normalizedCardType) {
         case 'sessions':
-          sessionUrl = `${API_BASE_URL}/session/?${new URLSearchParams(sessionParams)}`;
+          // Session URL is already set above
           break;
         case 'leads':
           // Agora busca em /events com formato específico
@@ -168,26 +194,13 @@ export async function GET(request: NextRequest) {
             if (value) leadsSearchParams.append(key, value);
           }
           leadUrl = `${API_ENDPOINTS.EVENTS}/?${leadsSearchParams.toString()}`;
-          console.log(`Lead URL (events): ${leadUrl}`);
-          
-          // Log detalhado dos parâmetros da requisição
-          console.log('Parâmetros para API de eventos (leads):', {
-            count_only: leadParams.count_only,
-            from: leadParams.from,
-            to: leadParams.to,
-            time_from: leadParams.time_from,
-            time_to: leadParams.time_to,
-            period: leadParams.period,
-            event_type: leadParams.event_type
-          });
           
           break;
         case 'clients':
           // Não buscar dados de clients (Connect Rate)
           break;
         case 'conversions':
-          // Conversions requires only sessions and leads data now
-          sessionUrl = `${API_BASE_URL}/session/?${new URLSearchParams(sessionParams)}`;
+          // Conversions requires only sessions (already set above) and leads data
           // Agora busca em /events com formato específico
           const convLeadsSearchParams = new URLSearchParams();
           // Adicionar apenas parâmetros não vazios
@@ -195,24 +208,13 @@ export async function GET(request: NextRequest) {
             if (value) convLeadsSearchParams.append(key, value);
           }
           leadUrl = `${API_ENDPOINTS.EVENTS}/?${convLeadsSearchParams.toString()}`;
-          console.log(`Conversion Lead URL (events): ${leadUrl}`);
-          
-          // Log detalhado dos parâmetros da requisição
-          console.log('Parâmetros para API de eventos:', {
-            count_only: leadParams.count_only,
-            from: leadParams.from,
-            to: leadParams.to,
-            time_from: leadParams.time_from,
-            time_to: leadParams.time_to,
-            period: leadParams.period,
-            event_type: leadParams.event_type
-          });
           
           break;
       }
     } else {
       // If no specific card, we need data except clients
-      sessionUrl = `${API_BASE_URL}/session/?${new URLSearchParams(sessionParams)}`;
+      // Session URL is already set above
+      
       // Agora busca em /events com formato específico
       const allLeadsSearchParams = new URLSearchParams();
       // Adicionar apenas parâmetros não vazios
@@ -220,18 +222,6 @@ export async function GET(request: NextRequest) {
         if (value) allLeadsSearchParams.append(key, value);
       }
       leadUrl = `${API_ENDPOINTS.EVENTS}/?${allLeadsSearchParams.toString()}`;
-      console.log(`All Lead URL (events): ${leadUrl}`);
-      
-      // Log detalhado dos parâmetros da requisição
-      console.log('Parâmetros para API de eventos (all):', {
-        count_only: leadParams.count_only,
-        from: leadParams.from,
-        to: leadParams.to,
-        time_from: leadParams.time_from,
-        time_to: leadParams.time_to,
-        period: leadParams.period,
-        event_type: leadParams.event_type
-      });
       
       // Não buscar dados de clients (Connect Rate)
     }
@@ -293,7 +283,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ 
         data: filteredData,
         timeFrame,
-        cardType 
+        cardType
       }, {
         status: 200,
         headers: {
@@ -303,7 +293,6 @@ export async function GET(request: NextRequest) {
         }
       });
     } catch (error) {
-      console.error('Error fetching dashboard data:', error);
       return NextResponse.json({ 
         data: [],
         errors: `Error fetching data: ${error instanceof Error ? error.message : 'Unknown error'}`
@@ -312,7 +301,6 @@ export async function GET(request: NextRequest) {
       });
     }
   } catch (error) {
-    console.error('Error in dashboard data route:', error);
     return NextResponse.json({ 
       data: [],
       errors: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
@@ -331,8 +319,6 @@ async function fetchApiData(url: string, type: string, retryCount = 0): Promise<
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
-    console.log(`Fetching data from: ${url} for type: ${type}`);
-
     // Configurar cabeçalhos especiais para a requisição
     const headers = {
       'Accept': 'application/json',
@@ -340,11 +326,6 @@ async function fetchApiData(url: string, type: string, retryCount = 0): Promise<
       'Cache-Control': 'no-cache, no-store, must-revalidate',
       'Pragma': 'no-cache'
     };
-
-    // Para eventos, garantir que estamos enviando Accept de forma correta
-    if (url.includes(API_ENDPOINTS.EVENTS)) {
-      console.log('Fazendo requisição de eventos');
-    }
 
     const response = await fetch(url, { 
       signal: controller.signal,
@@ -354,17 +335,8 @@ async function fetchApiData(url: string, type: string, retryCount = 0): Promise<
     clearTimeout(timeoutId);
     
     if (!response.ok) {
-      console.error(`Error fetching ${type} data: ${response.status} ${response.statusText}`);
-      try {
-        const errorText = await response.text();
-        console.error(`Error response body: ${errorText}`);
-      } catch (e) {
-        console.error('Could not read error response');
-      }
-      
       // For 5xx server errors, try to retry
       if (response.status >= 500 && response.status < 600 && retryCount < 2) {
-        console.log(`Retrying ${type} data fetch (attempt ${retryCount + 2}/3)...`);
         // Wait 2 seconds before retrying
         await new Promise(resolve => setTimeout(resolve, 2000));
         return fetchApiData(url, type, retryCount + 1);
@@ -375,13 +347,58 @@ async function fetchApiData(url: string, type: string, retryCount = 0): Promise<
     
     const data = await response.json();
     
+    // Special handling for sessions data
+    if (type === 'sessions') {
+      // Check if this is a sessions response
+      if (data && typeof data === 'object') {
+        // Handle array of period objects format: { periods: [{date, count}, {date, count}] }
+        if (data.periods && Array.isArray(data.periods)) {
+          // Map the periods array to our format
+          return data.periods.map((period: any) => ({
+            date: period.date,
+            count: Number(period.count) || 0,
+            type: 'sessions'
+          }));
+        }
+        // Handle object format: { periods: { "date1": count1, "date2": count2 } }
+        else if (data.periods && typeof data.periods === 'object') {
+          // Convert periods object to array of items
+          return Object.entries(data.periods).map(([date, count]) => ({
+            date,
+            count: Number(count) || 0,
+            type: 'sessions'
+          }));
+        } else if (Array.isArray(data.data)) {
+          // Map the data array to our format
+          return data.data.map((item: any) => ({
+            date: item.date || item.created_at || formatDateToISO(new Date()),
+            count: item.count || 1,
+            type: 'sessions'
+          }));
+        } else if (Array.isArray(data)) {
+          // The response itself is an array
+          return data.map((item: any) => ({
+            date: item.date || item.created_at || formatDateToISO(new Date()),
+            count: item.count || 1,
+            type: 'sessions'
+          }));
+        } else if (data.total !== undefined) {
+          // Just create a single entry for today with the total count
+          return [{
+            date: formatDateToISO(new Date()),
+            count: Number(data.total) || 0,
+            type: 'sessions'
+          }];
+        }
+      }
+      
+      return [];
+    }
+    
     // Verifica se estamos lidando com dados da API de eventos (para leads)
     if (url.includes(API_ENDPOINTS.EVENTS) && type === 'leads') {
-      console.log(`Processing events data as leads. Data structure:`, typeof data, Array.isArray(data) ? 'array' : 'not-array', data.events ? 'has events property' : 'no events property');
-      
       // Se for um array, extrair e converter eventos para o formato de leads
       if (data && Array.isArray(data)) {
-        console.log(`Data is an array with ${data.length} events`);
         return data.map(event => {
           // Extrair data e converter para formato ISO
           const eventDate = event.created_at || event.date;
@@ -391,7 +408,6 @@ async function fetchApiData(url: string, type: string, retryCount = 0): Promise<
             const dateObj = new Date(eventDate);
             formattedDate = formatDateToISO(dateObj);
           } catch (e) {
-            console.error(`Erro ao processar data do evento:`, e);
             // Fallback para data atual
             formattedDate = formatDateToISO(new Date());
           }
@@ -405,7 +421,6 @@ async function fetchApiData(url: string, type: string, retryCount = 0): Promise<
       } 
       // Se for objeto com formato de períodos
       else if (data && typeof data === 'object' && data.periods) {
-        console.log(`Data has periods property with ${Object.keys(data.periods).length} periods`);
         const entries = Object.entries(data.periods);
         
         return entries.map(([date, count]) => ({
@@ -416,7 +431,6 @@ async function fetchApiData(url: string, type: string, retryCount = 0): Promise<
       }
       // Se for objeto com propriedade events contendo um array
       else if (data && typeof data === 'object' && Array.isArray(data.events)) {
-        console.log(`Data has events array with ${data.events.length} events`);
         // Agrupar eventos por data
         const eventsByDate: Record<string, number> = data.events.reduce((acc: Record<string, number>, event: any) => {
           // Extrair a data e formatá-la no padrão ISO
@@ -427,7 +441,6 @@ async function fetchApiData(url: string, type: string, retryCount = 0): Promise<
             const dateObj = new Date(eventDate);
             isoDate = formatDateToISO(dateObj);
           } catch (e) {
-            console.error(`Erro ao processar data do evento:`, e);
             // Fallback para data atual
             isoDate = formatDateToISO(new Date());
           }
@@ -445,13 +458,11 @@ async function fetchApiData(url: string, type: string, retryCount = 0): Promise<
       }
       // Último caso - objeto com lista de eventos com estrutura específica
       else if (data && typeof data === 'object') {
-        console.log(`Processing data as general object`);
         try {
           // Tenta extrair eventos
           const events = data.data || data.events || data.items || [];
           
           if (Array.isArray(events) && events.length > 0) {
-            console.log(`Found ${events.length} events in data`);
             // Agrupar eventos por data
             const eventsByDate: Record<string, number> = events.reduce((acc: Record<string, number>, event: any) => {
               // Extrair a data do evento com fallbacks para vários formatos possíveis
@@ -462,7 +473,6 @@ async function fetchApiData(url: string, type: string, retryCount = 0): Promise<
                 const dateObj = new Date(eventDate);
                 isoDate = formatDateToISO(dateObj);
               } catch (e) {
-                console.error(`Erro ao processar data do evento:`, e);
                 // Fallback para data atual
                 isoDate = formatDateToISO(new Date());
               }
@@ -479,11 +489,10 @@ async function fetchApiData(url: string, type: string, retryCount = 0): Promise<
             })) as DashboardDataItem[];
           }
         } catch (e) {
-          console.error('Error processing events data:', e);
+          // Ignorar erros de processamento
         }
       }
       
-      console.warn('Could not process events data in any known format');
       return [];
     }
     
@@ -508,17 +517,12 @@ async function fetchApiData(url: string, type: string, retryCount = 0): Promise<
     return [];
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
-      console.error(`Timeout fetching ${type} data from ${url}`);
-      
       // Retry on timeout if we haven't reached max retries
       if (retryCount < 2) {
-        console.log(`Retrying ${type} data fetch after timeout (attempt ${retryCount + 2}/3)...`);
         // Wait 3 seconds before retrying after a timeout
         await new Promise(resolve => setTimeout(resolve, 3000));
         return fetchApiData(url, type, retryCount + 1);
       }
-    } else {
-      console.error(`Error fetching ${type} data:`, error);
     }
     return [];
   }

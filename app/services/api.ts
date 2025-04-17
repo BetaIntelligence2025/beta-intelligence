@@ -471,7 +471,7 @@ export function useSessionCount(params: DateRangeParams) {
 /**
  * Hook para obter o número de sessões ativas atual
  */
-export function useActiveSessionCount(params?: Partial<DateRangeParams>) {
+export function useActiveSessionCount(params?: Partial<DateRangeParams> & { profession_id?: string; funnel_id?: string }) {
   const queryKey = ['activeSessionCount', params];
   
   return useQuery({
@@ -479,11 +479,16 @@ export function useActiveSessionCount(params?: Partial<DateRangeParams>) {
     queryFn: async () => {
       // Preparar parâmetros
       const apiParams: Record<string, string> = {
-        count_only: 'true'
+        count_only: 'true',
+        landingPage: 'lp.vagasjustica.com.br'  // Adicionar o parâmetro landingPage para consistência com outras chamadas
       };
       
       if (params?.from) apiParams.from = formatDateToISO(params.from, false);
       if (params?.to) apiParams.to = formatDateToISO(params.to, true);
+      
+      // Adicionar parâmetros de profissão e funil, se disponíveis
+      if (params?.profession_id) apiParams.profession_id = params.profession_id;
+      if (params?.funnel_id) apiParams.funnel_id = params.funnel_id;
       
       // Usar a API route do Next.js em vez de chamar diretamente o backend
       const queryString = new URLSearchParams(apiParams).toString();
@@ -524,8 +529,6 @@ export function useActiveSessionCount(params?: Partial<DateRangeParams>) {
     // Configurações para dados em tempo real
     staleTime: 30 * 1000, // Considerar dados "frescos" por apenas 30 segundos
     refetchInterval: 60 * 1000, // Atualizar automaticamente a cada 1 minuto
-    refetchOnWindowFocus: true, // Atualizar quando o usuário voltar à janela
-    retry: 1,
-    gcTime: 2 * 60 * 1000 // 2 minutos de garbage collection
+    refetchOnWindowFocus: true,
   });
 } 

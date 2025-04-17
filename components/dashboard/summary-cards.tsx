@@ -21,6 +21,8 @@ interface SummaryCardsProps {
     data: DashboardDataItem[];
     isLoading?: boolean;
     errors?: string;
+    profession_id?: string;
+    funnel_id?: string;
   };
 }
 
@@ -51,11 +53,18 @@ export default function SummaryCards({ onCardSelect, selectedCard, dateRange, da
   const [internalSelectedCard, setInternalSelectedCard] = useState<CardType>(selectedCard || null);
   const [summaryData, setSummaryData] = useState<SummaryData>(defaultSummaryData);
   
-  // Buscar dados de sessões ativas usando o hook
+  // Extrair IDs de profissão e funil dos dados do dashboard, se disponíveis
+  const professionId = dashboardData?.profession_id || undefined;
+  const funnelId = dashboardData?.funnel_id || undefined;
+  
+  // Buscar dados de sessões ativas usando o hook, passando os filtros quando disponíveis
   const { 
     data: activeSessionsData,
     isLoading: isActiveSessionsLoading 
-  } = useActiveSessionCount();
+  } = useActiveSessionCount({
+    ...(professionId && { profession_id: professionId }),
+    ...(funnelId && { funnel_id: funnelId })
+  });
   
   // Estado local para armazenar o número de sessões ativas
   const [activeSessions, setActiveSessions] = useState<number>(0);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import SummaryCards from '@/components/dashboard/summary-cards';
 import VisualizationByPeriod from './visualization-client';
@@ -29,6 +29,13 @@ interface Funnel {
 export default function Dashboard() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  
+  // Log para debug dos parâmetros da URL
+  useEffect(() => {
+    console.log("URL completa:", window.location.href);
+    console.log("Todos os parâmetros:", Object.fromEntries(searchParams.entries()));
+    console.log("profession_id da URL:", searchParams.get('profession_id'));
+  }, [searchParams]);
   
   // Get active tab from URL or default to "geral"
   const urlTab = searchParams.get('tab') || 'geral';
@@ -114,11 +121,21 @@ export default function Dashboard() {
       params.delete('funnel_id');
       params.delete('profession_id');
       setSelectedFunnel(null);
+      setActiveFunnelId(null);
       setSelectedProfession(null);
     }
     
     // Usar replace em vez de push para evitar entradas extras no histórico
     router.replace(`?${params.toString()}`, { scroll: false });
+    
+    // Após mudar a tab, forçar atualização de dados
+    setTimeout(() => {
+      if (value === 'geral') {
+        refreshData();
+      } else if (value === 'funis' && selectedProfession) {
+        refreshFunnelData(selectedProfession, selectedFunnel);
+      }
+    }, 10);
   };
   
   // Handle profession selection
@@ -445,12 +462,14 @@ export default function Dashboard() {
   }, [timeFrame, dateRange]);
   
   useEffect(() => {
-    // Não fazer requisição se não estiver na tab geral
-    if (activeTab === 'geral') {
+    // Se tiver alguma das tabs ativas e não estiver carregando, atualizar dados
+    if (activeTab === 'geral' && !isLoading) {
       refreshData();
+    } else if (activeTab === 'funis' && !isLoading && selectedProfession) {
+      refreshFunnelData(selectedProfession, selectedFunnel);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParamsString, activeTab]);
+  }, [dateRange, timeFrame, activeTab]);
   
   // Função para lidar com a seleção de cards
   const handleCardSelect = (cardType: CardType) => {
@@ -473,20 +492,84 @@ export default function Dashboard() {
     return 'Visualização por Período';
   }, [activeTab, selectedFunnel, selectedProfession, funnels, professions]);
   
-  // Effect to update profession name when professions data is loaded
+  // Função para atualizar diretamente o nome da profissão quando encontrar
+  const updateProfessionDirectly = (id: string | null, name: string | null) => {
+    console.log(`Atualizando diretamente - ID: ${id}, Nome: ${name}`);
+    setSelectedProfession(id);
+    setSelectedProfessionName(name);
+  };
+
+  // Effect para inicializar o nome da profissão ao carregar a página
   useEffect(() => {
-    if (selectedProfession && professions && Array.isArray(professions)) {
+    const initProfession = async () => {
+      const profId = searchParams.get('profession_id');
+      if (!profId) return;
+      
+      try {
+        const response = await fetch(`/api/professions`);
+        if (response.ok) {
+          const data = await response.json();
+          const profIdNumber = parseInt(profId, 10);
+          
+          if (data.data && Array.isArray(data.data)) {
+            const foundProf = data.data.find((p: any) => p && p.profession_id === profIdNumber);
+            
+            if (foundProf && foundProf.profession_name) {
+              console.log("Inicialização direta:", foundProf.profession_name);
+              updateProfessionDirectly(profId, foundProf.profession_name);
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Erro na inicialização:", error);
+      }
+    };
+    
+    initProfession();
+  }, [searchParams]);
+  
+  // Derivar o nome da profissão a partir do ID selecionado e dados carregados usando useMemo
+  const professionDisplayName = useMemo(() => {
+    // Se não temos uma profissão selecionada, retornar o placeholder
+    if (!selectedProfession) return "Selecione profissão";
+    
+    // Se temos um nome já salvo no estado, usá-lo (para caso de carregar da API)
+    if (selectedProfessionName) return selectedProfessionName;
+    
+    // Verificar se temos dados de profissões e procurar pelo ID
+    if (professions && Array.isArray(professions) && professions.length > 0) {
       const foundProfession = professions.find((p: any) => p && p.profession_id === selectedProfession);
-      if (foundProfession) {
-        setSelectedProfessionName(foundProfession.profession_name);
+      if (foundProfession && foundProfession.profession_name) {
+        return foundProfession.profession_name;
       }
     }
-  }, [professions, selectedProfession]);
+    
+    // Se não encontramos em nenhum lugar, mostrar estado de carregamento
+    return "Carregando...";
+  }, [selectedProfession, selectedProfessionName, professions]);
   
   // Efeito para sincronizar activeFunnelId com selectedFunnel
   useEffect(() => {
     setActiveFunnelId(selectedFunnel);
   }, [selectedFunnel]);
+  
+  // Ordenar os funis: ativos primeiro, depois inativos
+  const sortedFunnels = useMemo(() => {
+    if (!funnels || !Array.isArray(funnels)) return [];
+    
+    return [...funnels].sort((a, b) => {
+      // Se ambos têm o mesmo status, manter a ordem original
+      const aActive = a?.is_active !== false;
+      const bActive = b?.is_active !== false;
+      
+      // Ordenar ativos primeiro, depois inativos
+      if (aActive && !bActive) return -1;
+      if (!aActive && bActive) return 1;
+      
+      // Para funis com o mesmo status, ordenar por nome
+      return (a?.funnel_name || '').localeCompare(b?.funnel_name || '');
+    });
+  }, [funnels]);
   
   return (
     <div id="dashboard-container" className="flex flex-col gap-4 p-4 md:p-8 bg-white">
@@ -545,13 +628,10 @@ export default function Dashboard() {
               >
                 <SelectTrigger className="w-[180px] h-9">
                   <SelectValue placeholder="Selecione profissão">
-                    {selectedProfessionName || (
-                      !selectedProfession 
-                        ? "Selecione profissão" 
-                        : !professions || !Array.isArray(professions)
-                          ? "Carregando..."
-                          : `ID: ${selectedProfession}`
-                    )}
+                    {selectedProfessionName || 
+                      (selectedProfession 
+                        ? "Carregando..." 
+                        : "Selecione profissão")}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
@@ -582,7 +662,7 @@ export default function Dashboard() {
                   Visão Geral
                 </Button>
                 
-                {!isLoadingFunnels && funnels && Array.isArray(funnels) && funnels.map((funnel: any) => {
+                {!isLoadingFunnels && sortedFunnels && sortedFunnels.length > 0 && sortedFunnels.map((funnel: any) => {
                   if (!funnel || !funnel.funnel_id) return null;
                   
                   // Check if funnel is active

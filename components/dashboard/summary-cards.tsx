@@ -193,13 +193,6 @@ export default function SummaryCards({
         previousConversionRate = previousSessionsCount > 0 
           ? Math.round((previousLeadsCount / previousSessionsCount) * 100) 
           : 0;
-      } else {
-        // Se não temos dados do período anterior, usamos os mocks como fallback
-        // Isso garante compatibilidade com a implementação anterior
-        previousLeadsCount = Math.max(1, Math.round(leadsCount * 0.9));
-        previousClientsCount = Math.max(1, Math.round(clientsCount * 0.8));
-        previousSessionsCount = Math.max(1, Math.round(sessionsCount * 0.9));
-        previousConversionRate = Math.max(1, Math.round(conversionRate * 0.85));
       }
       
       // Determinar o rótulo do período anterior

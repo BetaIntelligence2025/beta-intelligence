@@ -7,7 +7,44 @@ export const dynamic = 'force-dynamic';
 
 // Configurações de timeout e cache
 const TIMEOUT_MS = 30000; // 30 segundos
-const CACHE_TTL = 60; // 1 minuto
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
+
+// Cache para armazenar resultados temporariamente
+type CacheKey = string;
+type CacheEntry = {
+  data: any;
+  timestamp: number;
+  expiresAt: number;
+};
+
+// Tamanho máximo do cache (para evitar consumo excessivo de memória)
+const MAX_CACHE_SIZE = 100;
+
+// Cache LRU (Least Recently Used)
+const cache = new Map<string, CacheEntry>();
+
+// Função para limpar o cache quando excede o tamanho máximo
+function pruneCache() {
+  if (cache.size <= MAX_CACHE_SIZE) return;
+  
+  // Ordenar entradas por timestamp (da mais antiga para a mais recente)
+  const entries = Array.from(cache.entries())
+    .sort((a, b) => a[1].timestamp - b[1].timestamp);
+  
+  // Remover as entradas mais antigas até atingir o tamanho desejado
+  const entriesToRemove = entries.slice(0, entries.length - MAX_CACHE_SIZE);
+  for (const [key] of entriesToRemove) {
+    cache.delete(key);
+  }
+}
+
+// Função para gerar uma chave de cache com base nos parâmetros
+function generateCacheKey(params: URLSearchParams): string {
+  return Array.from(params.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([key, value]) => `${key}=${value}`)
+    .join('&');
+}
 
 /**
  * Função auxiliar para converter uma data para o formato UTC com timezone do Brasil
@@ -54,9 +91,33 @@ function formatTimeToHHMM(date: Date): string {
  * GET handler for optimized dashboard data fetching
  */
 export async function GET(request: NextRequest) {
+  const startTime = Date.now();
+  // Use request headers instead of headers() function
+  const referer = request.headers.get('referer') || 'unknown';
+  const contentType = request.headers.get('content-type') || 'unknown';
+  
+  const { searchParams } = new URL(request.url);
+  console.log(`[API] Dashboard data request received, params:`, Object.fromEntries(searchParams));
+  
+  // Verificar se temos um resultado em cache
+  const cacheKey = generateCacheKey(searchParams);
+  const cachedResult = cache.get(cacheKey);
+  
+  // Se temos um resultado em cache válido, retorná-lo imediatamente
+  if (cachedResult && cachedResult.expiresAt > Date.now()) {
+    console.log(`[API] Cache hit for dashboard data, returning cached result`);
+    return NextResponse.json(cachedResult.data, {
+      headers: {
+        'X-Cache': 'HIT',
+        'X-Cache-Age': `${Math.floor((Date.now() - cachedResult.timestamp) / 1000)}s`,
+        'Cache-Control': 'public, max-age=300'
+      }
+    });
+  }
+  
+  console.log(`[API] Cache miss for dashboard data, fetching from API`);
+  
   try {
-    const { searchParams } = new URL(request.url);
-    
     // Get specific parameters
     let from = searchParams.get('from');
     let to = searchParams.get('to');
@@ -280,33 +341,43 @@ export async function GET(request: NextRequest) {
         }) : 
         combinedData;
       
-      return NextResponse.json({ 
+      // Armazenar o resultado no cache
+      const result = {
         data: filteredData,
         timeFrame,
         cardType
-      }, {
-        status: 200,
+      };
+      
+      cache.set(cacheKey, {
+        data: result,
+        timestamp: Date.now(),
+        expiresAt: Date.now() + CACHE_TTL
+      });
+      
+      // Limpar cache se necessário
+      pruneCache();
+      
+      console.log(`[API] Dashboard data processed in ${Date.now() - startTime}ms`);
+      
+      return NextResponse.json(result, {
         headers: {
-          'Cache-Control': `public, s-maxage=${CACHE_TTL}, stale-while-revalidate=${CACHE_TTL * 2}`,
-          'Pragma': 'no-cache',
-          'Expires': '0'
+          'X-Cache': 'MISS',
+          'Cache-Control': 'public, max-age=300'
         }
       });
     } catch (error) {
-      return NextResponse.json({ 
-        data: [],
-        errors: `Error fetching data: ${error instanceof Error ? error.message : 'Unknown error'}`
-      }, { 
-        status: 500 
-      });
+      console.error(`[API] Error in dashboard data:`, error);
+      return NextResponse.json(
+        { error: 'Internal server error', details: error instanceof Error ? error.message : String(error) },
+        { status: 500 }
+      );
     }
   } catch (error) {
-    return NextResponse.json({ 
-      data: [],
-      errors: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
-    }, { 
-      status: 500 
-    });
+    console.error(`[API] Error in dashboard data:`, error);
+    return NextResponse.json(
+      { error: 'Internal server error', details: error instanceof Error ? error.message : String(error) },
+      { status: 500 }
+    );
   }
 }
 

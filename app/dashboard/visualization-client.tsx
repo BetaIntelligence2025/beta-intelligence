@@ -19,17 +19,13 @@ import {
 import { DateRange } from "./date-filter-button";
 import { CardType } from "@/components/dashboard/summary-cards";
 import { format } from "date-fns";
-import { DashboardDataItem, TimeFrame } from "./types";
+import { DashboardDataItem, TimeFrame, DashboardState } from "./types";
 
 // Chart configuration
 const chartConfig = {
   leads: {
     label: "Leads",
     color: "#1F2937"
-  },
-  clients: {
-    label: "Connect Rate",
-    color: "#4B5563"
   },
   sessions: {
     label: "Sessões",
@@ -45,11 +41,7 @@ interface VisualizationByPeriodProps {
   title?: string;
   dateRange?: DateRange;
   selectedCard?: CardType;
-  dashboardData?: {
-    data: DashboardDataItem[];
-    isLoading: boolean;
-    errors?: string;
-  };
+  dashboardData?: DashboardState;
 }
 
 // Memoize the chart to prevent unnecessary re-renders
@@ -62,88 +54,103 @@ const MemoizedChart = memo(function Chart({
   timeFrame: TimeFrame;
   visibleDataKeys: string[];
 }) {
+  // Verificar se estamos exibindo dados por hora (baseado no formato do período)
+  const isHourlyData = data.length > 0 && data[0].period.endsWith('h');
+
   return (
-        <ChartContainer className="w-full lg:h-96" config={chartConfig}>
-          <LineChart
-            accessibilityLayer
-        data={data}
-            margin={{
-              left: 20,
-              right: 20
-            }}>
-            <CartesianGrid vertical={false} />
-            <XAxis
-                dataKey="period"
-              tickLine={false}
-              axisLine={false}
-              tickMargin={8}
-                tickFormatter={(value) => {
-            // Para exibição diária, mostrar o dia e mês para maior clareza
-                  if (timeFrame === "Daily") {
-              // Extrair dia e mês do formato dd/MM/yyyy
-              const parts = value.split('/');
-              return `${parts[0]}/${parts[1]}`; // Show as dd/MM instead of just dd
-                  }
-                  return value;
-                }}
-            />
-            <YAxis
-              tickLine={false}
-              axisLine={false}
-              tickMargin={35}
-              tickFormatter={(value) => `${value}`}
-            />
-            <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
-              
-              {visibleDataKeys.includes('clients') && (
-                <Line 
-                  dataKey="clients" 
-                  type="monotone" 
-                  stroke={chartConfig.clients.color}
-                  strokeWidth={2}
-                  connectNulls={true}
-                  dot={{ strokeWidth: 2, r: 2 }}
-                  activeDot={{ r: 4 }}
-                />
-              )}
-              
-              {visibleDataKeys.includes('sessions') && (
-                <Line 
-                  dataKey="sessions" 
-                  type="monotone" 
-                  stroke={chartConfig.sessions.color}
-                  strokeWidth={2}
-                  connectNulls={true}
-                  dot={{ strokeWidth: 2, r: 2 }}
-                  activeDot={{ r: 4 }}
-                />
-              )}
-              
-              {visibleDataKeys.includes('leads') && (
-                <Line 
-                  dataKey="leads" 
-                  type="monotone" 
-                  stroke={chartConfig.leads.color}
-                  strokeWidth={2} 
-                  connectNulls={true}
-                  dot={{ strokeWidth: 2, r: 2 }}
-                  activeDot={{ r: 4 }}
-                />
-              )}
-              
-              {visibleDataKeys.includes('conversions') && (
-                <Line 
-                  dataKey="conversions" 
-                  type="monotone" 
-                  stroke={chartConfig.conversions.color}
-                  strokeWidth={2}
-                  connectNulls={true}
-                  dot={{ strokeWidth: 2, r: 2 }}
-                  activeDot={{ r: 4 }}
-                />
-              )}
-          </LineChart>
-        </ChartContainer>
+        <>
+          {isHourlyData && (
+            <div className="text-xs text-gray-500 ml-8 mb-2">
+              Visualização por hora (dados de um único dia)
+            </div>
+          )}
+          <ChartContainer className="w-full lg:h-96" config={chartConfig}>
+            <LineChart
+              accessibilityLayer
+              data={data}
+              margin={{
+                left: 20,
+                right: 20
+              }}>
+              <CartesianGrid vertical={false} />
+              <XAxis
+                  dataKey="period"
+                tickLine={false}
+                axisLine={false}
+                tickMargin={8}
+                  tickFormatter={(value) => {
+                    // Se for dados por hora, manter o formato "XXh"
+                    if (value.endsWith('h')) {
+                      return value;
+                    }
+                    
+                    // Para exibição diária, mostrar o dia e mês para maior clareza
+                    if (timeFrame === "Daily") {
+                      // Extrair dia e mês do formato dd/MM/yyyy
+                      const parts = value.split('/');
+                      return `${parts[0]}/${parts[1]}`; // Show as dd/MM instead of just dd
+                    }
+                    return value;
+                  }}
+              />
+              <YAxis
+                tickLine={false}
+                axisLine={false}
+                tickMargin={35}
+                tickFormatter={(value) => `${value}`}
+              />
+              <ChartTooltip 
+                cursor={false} 
+                content={
+                  <ChartTooltipContent 
+                    labelFormatter={(label) => {
+                      // Se for dados por hora, mostrar "Hora: XXh"
+                      if (isHourlyData) {
+                        return `Hora: ${label}`;
+                      }
+                      return label;
+                    }}
+                  />
+                } 
+              />
+                {visibleDataKeys.includes('sessions') && (
+                  <Line 
+                    dataKey="sessions" 
+                    type="monotone" 
+                    stroke={chartConfig.sessions.color}
+                    strokeWidth={2}
+                    connectNulls={true}
+                    dot={{ strokeWidth: 2, r: 2 }}
+                    activeDot={{ r: 4 }}
+                  />
+                )}
+                
+                {visibleDataKeys.includes('leads') && (
+                  <Line 
+                    dataKey="leads" 
+                    type="monotone" 
+                    stroke={chartConfig.leads.color}
+                    strokeWidth={2} 
+                    connectNulls={true}
+                    dot={{ strokeWidth: 2, r: 2 }}
+                    activeDot={{ r: 4 }}
+                  />
+                )}
+                
+                {visibleDataKeys.includes('conversions') && (
+                  <Line 
+                    dataKey="conversions" 
+                    type="monotone" 
+                    stroke={chartConfig.conversions.color}
+                    strokeWidth={2}
+                    connectNulls={true}
+                    dot={{ strokeWidth: 2, r: 2 }}
+                    activeDot={{ r: 4 }}
+                  />
+                )}
+            </LineChart>
+          </ChartContainer>
+        </>
   );
 });
 
@@ -165,8 +172,6 @@ export default function VisualizationByPeriod(props: VisualizationByPeriodProps)
   // Initialize with value from URL params
   const [timeFrame, setTimeFrame] = useState<TimeFrame>(defaultTimeFrame);
   const [isLoading, setIsLoading] = useState(true);
-  const [periodData, setPeriodData] = useState<DashboardDataItem[]>([]);
-  const [chartData, setChartData] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
   
   // Explicitly set isMounted to true on initialization
@@ -229,25 +234,17 @@ export default function VisualizationByPeriod(props: VisualizationByPeriodProps)
     const from = dateRange.from ? formatDateForApi(dateRange.from) : defaultDateRange.from;
     const to = dateRange.to ? formatDateForApi(dateRange.to, true) : defaultDateRange.to;
     
-    console.log('Using effective date range:', { from, to });
-    console.log('Original date objects:', {
-      from: dateRange.from ? dateRange.from.toISOString() : null,
-      to: dateRange.to ? dateRange.to.toISOString() : null
-    });
-    
     return { from, to };
   }, [dateRange, defaultDateRange, formatDateForApi]);
   
   // Filter which lines to show based on selectedCard
   const visibleDataKeys = useMemo(() => {
-    // Quando não há card selecionado, exibir todos os tipos exceto clients
     if (!selectedCard) {
-      return ['clients', 'sessions', 'leads', 'conversions'];
+      return ['sessions', 'leads', 'conversions'];
     }
     
     // Map from singular to plural if needed
     const singularToPlural: Record<string, string> = {
-      'client': 'clients',
       'session': 'sessions',
       'lead': 'leads',
       'conversion': 'conversions'
@@ -257,6 +254,92 @@ export default function VisualizationByPeriod(props: VisualizationByPeriodProps)
     const cardType = selectedCard.endsWith('s') ? selectedCard : singularToPlural[selectedCard] || selectedCard;
     return [cardType];
   }, [selectedCard]);
+  
+  // Process chart data from dashboard data
+  const processChartData = useCallback((data: any, currentTimeFrame: TimeFrame) => {
+    if (!data) return [];
+    
+    // Dados já processados, apenas formatar para o gráfico
+    const graphData: {
+      period: string;
+      date: string;
+      sessions: number;
+      leads: number;
+      conversions: number;
+    }[] = [];
+    
+    // Verificar se é um único dia com dados por hora disponíveis
+    if (data.hourly_data && 
+        data.period_counts && 
+        Object.keys(data.period_counts).length === 1 && 
+        data.hourly_data.sessions_by_hour) {
+      
+      console.log('Processando visualização por hora para um único dia');
+      
+      // Converter dados por hora em formato para o gráfico
+      return Object.entries(data.hourly_data.sessions_by_hour)
+        .map(([hour, sessionsCount]) => {
+          // Formatar hora para display (00 a 23)
+          const hourDisplay = `${hour}h`;
+          
+          return {
+            period: hourDisplay,
+            date: hour, // Guardar a hora original como referência
+            // Acessar dados por hora diretamente
+            sessions: Number(sessionsCount) || 0,
+            leads: Number(data.hourly_data?.leads_by_hour?.[hour]) || 0,
+            conversions: Number(data.hourly_data?.conversion_rate_by_hour?.[hour]) || 0
+          };
+        })
+        .sort((a, b) => a.date.localeCompare(b.date)); // Ordenar por hora
+    }
+    
+    // Caso padrão: usar period_counts para dias/semanas/meses
+    if (data.period_counts && typeof data.period_counts === 'object') {
+      return Object.entries(data.period_counts)
+        .map(([date, sessionsCount]) => {
+          const parts = date.split('-');
+          const formattedPeriod = currentTimeFrame === 'Daily' ? 
+            `${parts[2]}/${parts[1]}` : 
+            (currentTimeFrame === 'Monthly' ? 
+              `${parts[1]}/${parts[0]}` : date);
+          
+          return {
+            period: formattedPeriod,
+            date,
+            // Acesso direto aos dados sem validações complexas
+            sessions: Number(sessionsCount) || 0,
+            leads: Number(data.leads_by_day?.[date]) || 0,
+            conversions: Number(data.conversion_rate_by_day?.[date]) || 0
+          };
+        })
+        .sort((a, b) => a.date.localeCompare(b.date));
+    }
+    
+    // Log de erro para ajudar na depuração
+    console.error('Formato de dados inválido para o gráfico:', data);
+    
+    // Fallback: retornar array vazio quando não há dados válidos
+    return [];
+  }, []);
+  
+  // Memorize chart data
+  const chartData = useMemo(() => {
+    if (!dashboardData?.raw) return [];
+    return processChartData(dashboardData.raw, timeFrame);
+  }, [dashboardData?.raw, timeFrame, processChartData]);
+  
+  // Determinar se estamos visualizando dados de um único dia
+  const isSingleDayView = useMemo(() => {
+    if (!dashboardData?.raw?.period_counts) return false;
+    return Object.keys(dashboardData.raw.period_counts).length === 1;
+  }, [dashboardData?.raw?.period_counts]);
+  
+  // Estados simplificados
+  useEffect(() => {
+    setIsLoading(!dashboardData || dashboardData.isLoading);
+    setError(dashboardData?.errors || null);
+  }, [dashboardData]);
   
   // Handler for timeframe changes without forcing full re-render
   function handleTimeFrameChange(value: string) {
@@ -274,201 +357,7 @@ export default function VisualizationByPeriod(props: VisualizationByPeriodProps)
       '',
       `${window.location.pathname}?${params.toString()}`
     );
-    
-    // Trigger immediate data refresh
-    if (periodData && periodData.length > 0) {
-      processChartData(periodData, value as TimeFrame);
-    }
   }
-  
-  // Separate the processing logic into a reusable function
-  async function processChartData(data: DashboardDataItem[], currentTimeFrame: TimeFrame) {
-    try {
-      console.log('Processing chart data with timeframe:', currentTimeFrame);
-      setIsLoading(true);
-      
-      // Set a timeout that will trigger if the request takes too long
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Tempo limite excedido ao carregar dados')), 35000);
-      });
-      
-      // The actual API call
-      const fetchPromise = fetch('/api/dashboard/process', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          data: data,
-          timeFrame: currentTimeFrame,
-          dateRange: dateRange && dateRange.from && dateRange.to 
-            ? { 
-                from: dateRange.from.toISOString(), 
-                to: dateRange.to.toISOString() 
-              } 
-            : null
-        })
-      });
-      
-      // Race between the timeout and the fetch
-      const response = await Promise.race([fetchPromise, timeoutPromise]) as Response;
-      
-      if (!response.ok) {
-        throw new Error(`API respondeu com erro ${response.status}`);
-      }
-      
-      const processedData = await response.json();
-      
-      if (isMounted.current) {
-        console.log('Setting chart data:', processedData.length, 'items');
-        setChartData(processedData);
-        setIsLoading(false);
-      }
-    } catch (error) {
-      console.error('Error processing chart data:', error);
-      if (isMounted.current) {
-        let errorMessage = 'Erro ao processar dados';
-        
-        if (error instanceof Error) {
-          if (error.message.includes('tempo limite') || error.message.includes('timeout')) {
-            errorMessage = 'Tempo limite excedido. A API está demorando para responder.';
-          } else {
-            errorMessage = error.message;
-          }
-        }
-        
-        setError(errorMessage);
-        setIsLoading(false);
-      }
-    }
-  }
-  
-  // First effect to handle dashboardData updates
-  useEffect(() => {
-    if (!dashboardData) return;
-    
-    // Update period data when dashboardData changes
-    if (dashboardData.isLoading) {
-      setIsLoading(true);
-    } else {
-      setPeriodData(dashboardData.data || []);
-      if (dashboardData.errors) {
-        setError(dashboardData.errors);
-      }
-    }
-  }, [dashboardData]);
-  
-  // Separate effect to process data when periodData or timeFrame changes
-  useEffect(() => {
-    if (!periodData || periodData.length === 0) {
-      setChartData([]);
-      setIsLoading(false);
-      return;
-    }
-    
-    let isCancelled = false;
-    
-    const processData = async () => {
-      if (!isCancelled) {
-        await processChartData(periodData, timeFrame);
-      }
-    };
-    
-    processData();
-    
-    return () => {
-      isCancelled = true;
-    };
-  }, [periodData, timeFrame, dateRange]);
-  
-  // Only fetch data directly if dashboardData is not provided
-  useEffect(() => {
-    if (dashboardData) return; // Skip if dashboardData is provided
-    
-    let isCancelled = false;
-    setIsLoading(true);
-    
-    async function fetchData(retryCount = 0) {
-      try {
-        const params = new URLSearchParams();
-        if (dateRange?.from) params.append('from', dateRange.from.toISOString());
-        if (dateRange?.to) params.append('to', dateRange.to.toISOString());
-        if (selectedCard) params.append('cardType', selectedCard);
-        params.append('timeFrame', timeFrame);
-        
-        // Add a cache-busting parameter to prevent stale data
-        params.append('_t', Date.now().toString());
-        
-        console.log(`Fetching dashboard data with timeFrame: ${timeFrame}`);
-        
-        // Create a timeout promise that rejects after 35 seconds
-        const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('Tempo limite excedido ao carregar dados')), 35000);
-        });
-        
-        const fetchPromise = fetch(`/api/dashboard/data?${params.toString()}`);
-        const response = await Promise.race([fetchPromise, timeoutPromise]) as Response;
-        
-        if (!response.ok) {
-          throw new Error(`API respondeu com erro ${response.status}`);
-        }
-        
-        const data = await response.json();
-        
-        if (!isCancelled && isMounted.current) {
-          setPeriodData(data.data || []);
-        }
-      } catch (error) {
-        console.error('Error fetching data:', error);
-        
-        // Retry logic - maximum 2 retries (total 3 attempts)
-        if (retryCount < 2 && !isCancelled) {
-          console.log(`Retrying fetch (attempt ${retryCount + 2}/3)...`);
-          setTimeout(() => fetchData(retryCount + 1), 2000); // Wait 2 seconds before retry
-          return;
-        }
-        
-        if (!isCancelled && isMounted.current) {
-          let errorMessage = 'Erro ao buscar dados';
-          
-          if (error instanceof Error) {
-            if (error.message.includes('tempo limite') || error.message.includes('timeout')) {
-              errorMessage = 'Tempo limite excedido. A API está demorando para responder.';
-            } else {
-              errorMessage = error.message;
-            }
-          }
-          
-          setError(errorMessage);
-          setIsLoading(false);
-        }
-      }
-    }
-    
-    fetchData();
-    
-    return () => {
-      isCancelled = true;
-    };
-  }, [dateRange, selectedCard, dashboardData, timeFrame]);
-  
-  // Synchronize with URL changes
-  useEffect(() => {
-    const handleUrlChange = () => {
-      const newParams = new URLSearchParams(window.location.search);
-      const newTimeFrame = newParams.get('timeFrame') as TimeFrame;
-      if (newTimeFrame && newTimeFrame !== timeFrame) {
-        setTimeFrame(newTimeFrame);
-      }
-    };
-
-    // Listen for popstate events (when user navigates back/forward)
-    window.addEventListener('popstate', handleUrlChange);
-
-    return () => {
-      window.removeEventListener('popstate', handleUrlChange);
-    };
-  }, [timeFrame]);
   
   // Create the appropriate display value for the selected timeframe
   const timeFrameDisplay = {
@@ -562,7 +451,14 @@ export default function VisualizationByPeriod(props: VisualizationByPeriodProps)
       ) : (
         <Card className="col-span-4">
           <CardHeader className="relative">
-            <CardTitle>{title}</CardTitle>
+            <CardTitle>
+              {title}
+              {isSingleDayView && (
+                <span className="text-xs text-gray-500 ml-2 font-normal">
+                  (visualização por hora disponível)
+                </span>
+              )}
+            </CardTitle>
             <div className="absolute end-4 top-3">
               <Select value={timeFrame} onValueChange={handleTimeFrameChange}>
                 <SelectTrigger className="w-[140px]">

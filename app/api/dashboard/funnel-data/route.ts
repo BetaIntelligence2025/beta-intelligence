@@ -33,33 +33,25 @@ export async function GET(request: NextRequest) {
       }, { status: 400 });
     }
     
-    // Build API URL
-    const params: Record<string, string> = {
-      profession_id: professionId,
-      from: from || '',
-      to: to || '',
-      time_frame: timeFrame
-    };
+    // Build API URL for the external API (currently not implemented)
+    const apiUrl = new URL(`${API_BASE_URL}/funnels/data`);
     
-    // Add funnel_id if provided
-    if (funnelId) {
-      params.funnel_id = funnelId;
-    }
+    // Add parameters to the URL
+    apiUrl.searchParams.set('profession_id', professionId);
+    if (from) apiUrl.searchParams.set('from', from);
+    if (to) apiUrl.searchParams.set('to', to);
+    apiUrl.searchParams.set('time_frame', timeFrame);
+    if (funnelId) apiUrl.searchParams.set('funnel_id', funnelId);
     
-    // For now, return mock data as this endpoint is still in development
-    // In a real implementation, we would fetch data from the backend API
-    
-    // Generate mock data based on parameters
-    const mockData = generateMockData(professionId, funnelId, timeFrame);
-    
+    // Return error - no mock data
     return NextResponse.json({
-      ...mockData,
-      params,
-      source: 'funnel'
-    }, {
-      status: 200,
+      error: 'Este endpoint ainda não está implementado na API. Por favor, use o endpoint unificado.',
+      status: 501,
+      details: 'A funcionalidade está em desenvolvimento. Utilize o endpoint /api/dashboard/unified para obter dados reais.'
+    }, { 
+      status: 501, // Not Implemented
       headers: {
-        'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120',
+        'Cache-Control': 'no-store',
       }
     });
     
@@ -72,71 +64,4 @@ export async function GET(request: NextRequest) {
       status: 500 
     });
   }
-}
-
-// Helper function to generate mock data
-function generateMockData(professionId: string, funnelId: string | null, timeFrame: string) {
-  // Generate dates based on time frame
-  const today = new Date();
-  const dates: string[] = [];
-  
-  // Generate daily dates for the last 30 days
-  for (let i = 0; i < 30; i++) {
-    const date = new Date();
-    date.setDate(today.getDate() - i);
-    const formattedDate = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-    dates.push(formattedDate);
-  }
-  
-  // Generate sample data
-  const data = dates.map(date => {
-    // Randomize values but make them consistent by using the profession and funnel IDs as seeds
-    const profSeed = parseInt(professionId, 36) % 100;
-    const funnelSeed = funnelId ? parseInt(funnelId.substring(0, 5), 36) % 100 : 50;
-    const dateSeed = parseInt(date.replace(/-/g, '')) % 100;
-    
-    // Base values modified by seeds
-    const sessionsFactor = ((profSeed + dateSeed) % 100) / 100;
-    const leadsFactor = ((funnelSeed + dateSeed) % 100) / 100;
-    
-    const sessions = Math.floor(100 + 300 * sessionsFactor);
-    const leads = Math.floor(10 + 50 * leadsFactor);
-    
-    return {
-      date,
-      type: 'sessions',
-      count: sessions
-    };
-  });
-  
-  // Add leads data
-  dates.forEach(date => {
-    const profSeed = parseInt(professionId, 36) % 100;
-    const funnelSeed = funnelId ? parseInt(funnelId.substring(0, 5), 36) % 100 : 50;
-    const dateSeed = parseInt(date.replace(/-/g, '')) % 100;
-    
-    const leadsFactor = ((funnelSeed + dateSeed) % 100) / 100;
-    const leads = Math.floor(10 + 50 * leadsFactor);
-    
-    data.push({
-      date,
-      type: 'leads',
-      count: leads
-    });
-  });
-  
-  // Calculate totals
-  const sessionItems = data.filter(item => item.type === 'sessions');
-  const leadItems = data.filter(item => item.type === 'leads');
-  
-  const sessions_count = sessionItems.reduce((sum, item) => sum + item.count, 0);
-  const leads_count = leadItems.reduce((sum, item) => sum + item.count, 0);
-  
-  return {
-    data,
-    sessions_count,
-    leads_count,
-    profession_id: professionId,
-    funnel_id: funnelId
-  };
 } 

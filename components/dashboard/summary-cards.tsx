@@ -4,12 +4,12 @@ import { ArrowDown, ArrowUp, Braces, DollarSignIcon, HelpCircle, Monitor, UsersI
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import CountAnimation from "../ui/count-animation";
 import { cn } from "@/lib/utils";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { format, subDays, subMonths, isSameDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { DateRange } from "@/app/dashboard/date-filter-button";
 import { useActiveSessionCount } from "@/app/services/api";
-import { DashboardDataItem } from "@/app/dashboard/types";
+import { DashboardDataItem, DashboardState, MetricWithComparison } from "@/app/dashboard/types";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 export type CardType = "leads" | "clients" | "sessions" | "conversions" | null;
@@ -26,17 +26,8 @@ interface SummaryCardsProps {
   onCardSelect?: (cardType: CardType) => void;
   selectedCard?: CardType;
   dateRange?: DateRangeWithString;
-  dashboardData?: {
-    data: DashboardDataItem[];
-    isLoading?: boolean;
-    errors?: string;
-    profession_id?: string;
-    funnel_id?: string;
-  };
-  previousPeriodData?: {
-    data: DashboardDataItem[];
-    isLoading?: boolean;
-  };
+  dashboardData?: DashboardState;
+  previousPeriodData?: DashboardState;
 }
 
 interface CardData {
@@ -92,6 +83,34 @@ export default function SummaryCards({
   // Estado local para armazenar o número de sessões ativas
   const [activeSessions, setActiveSessions] = useState<number>(0);
   
+  // Calcula métricas por tipo
+  const calculateMetric = useCallback((current: number, previous: number): CardData => {
+    // Verificar se é possível fazer uma comparação válida
+    const isComparable = previous > 0;
+    
+    // Se o valor anterior for zero, não é possível calcular a porcentagem
+    if (!isComparable) {
+      return {
+        count: current,
+        previousCount: previous, // Armazenar o valor anterior mesmo que seja zero
+        percentage: 0,
+        isPositive: current > 0,
+        isComparable: false
+      };
+    }
+    
+    // Calcular a variação percentual: ((valorAtual - valorAnterior) / valorAnterior) * 100
+    const percentChange = ((current - previous) / previous) * 100;
+    
+    return {
+      count: current,
+      previousCount: previous,
+      percentage: Math.abs(Math.round(percentChange * 10) / 10), // Arredondar para 1 casa decimal
+      isPositive: percentChange >= 0,
+      isComparable: true
+    };
+  }, []);
+  
   // Função de clique de card otimizada para evitar re-renderizações
   const handleCardClick = useCallback((cardType: CardType) => {
     const newSelectedCard = internalSelectedCard === cardType ? null : cardType;
@@ -123,137 +142,104 @@ export default function SummaryCards({
     }
   }, [activeSessionsData]);
   
-  // Função para determinar o rótulo do período anterior com base no intervalo de datas atual
-  const getPreviousPeriodLabel = useCallback((range?: DateRangeWithString): string => {
-    if (!range || !range.from || !range.to) return "período anterior";
-    
-    // Calcula a duração do período atual em dias
-    const currentPeriodStart = new Date(range.from);
-    const currentPeriodEnd = range.to ? new Date(range.to) : new Date();
-    const daysDiff = Math.round(
-      (currentPeriodEnd.getTime() - currentPeriodStart.getTime()) / (1000 * 60 * 60 * 24)
-    );
-    
-    // Determina o rótulo com base na duração
-    if (daysDiff <= 1) return "dia anterior";
-    if (daysDiff <= 7) return "semana anterior";
-    if (daysDiff <= 31) return "mês anterior";
-    if (daysDiff <= 90) return "trimestre anterior";
-    return "período anterior";
-  }, []);
-
   // Processar dados do dashboard
   useEffect(() => {
     if (!dashboardData) return;
     
-    // Iniciar processamento apenas quando os dados estiverem disponíveis e não estiver carregando
-    if (dashboardData.data.length > 0 && !dashboardData.isLoading) {
-      // Inicializar contadores para o período atual
-      let leadsCount = 0;
-      let clientsCount = 0;
-      let sessionsCount = 0;
+    // Se está carregando, mostrar loader
+    if (dashboardData.isLoading) {
+      setSummaryData(prev => ({ ...prev, isLoading: true }));
+      return;
+    }
+    
+    // Usar diretamente os dados da API, que já vêm no formato correto
+    if (dashboardData.raw) {
+      // Tratar os dados como any para acessar a nova estrutura
+      const rawData = dashboardData.raw as any;
       
-      // Contar cada tipo para o período atual
-      dashboardData.data.forEach(item => {
-        if (item.type === 'leads') {
-          leadsCount += item.count;
-        } else if (item.type === 'clients') {
-          clientsCount += item.count;
-        } else if (item.type === 'sessions') {
-          sessionsCount += item.count;
-        }
-      });
-      
-      // Calcular conversão para o período atual
-      const conversionRate = sessionsCount > 0 ? Math.round((leadsCount / sessionsCount) * 100) : 0;
-      
-      // Inicializar contadores para o período anterior
-      let previousLeadsCount = 0;
-      let previousClientsCount = 0;
-      let previousSessionsCount = 0;
-      let previousConversionRate = 0;
-      
-      // Se temos dados do período anterior, calcular contagens
-      const hasPreviousPeriodData = previousPeriodData && 
-                                   previousPeriodData.data && 
-                                   previousPeriodData.data.length > 0;
-      
-      if (hasPreviousPeriodData) {
-        previousPeriodData?.data.forEach(item => {
-          if (item.type === 'leads') {
-            previousLeadsCount += item.count;
-          } else if (item.type === 'clients') {
-            previousClientsCount += item.count;
-          } else if (item.type === 'sessions') {
-            previousSessionsCount += item.count;
-          }
+      // Validar se temos os dados necessários
+      if (!rawData.sessions || !rawData.leads || !rawData.conversion_rate) {
+        console.error('Dados incompletos recebidos da API:', rawData);
+        setSummaryData({
+          ...defaultSummaryData,
+          isLoading: false
         });
-        
-        // Calcular taxa de conversão anterior
-        previousConversionRate = previousSessionsCount > 0 
-          ? Math.round((previousLeadsCount / previousSessionsCount) * 100) 
-          : 0;
+        return;
       }
       
-      // Determinar o rótulo do período anterior
-      const periodLabel = getPreviousPeriodLabel(dateRange);
-      
-      // Atualizar dados de resumo com valores de ambos os períodos
-      setSummaryData({
-        leads: calculateMetric(leadsCount, previousLeadsCount),
-        clients: calculateMetric(clientsCount, previousClientsCount),
-        sessions: calculateMetric(sessionsCount, previousSessionsCount),
-        conversions: calculateMetric(conversionRate, previousConversionRate),
-        isLoading: false,
-        previousPeriodLabel: periodLabel
-      });
-      
-      console.log('Summary cards updated with real data comparison:', { 
-        current: { 
-          leads: leadsCount, 
-          clients: clientsCount, 
-          sessions: sessionsCount, 
-          conversions: conversionRate 
+      // Criar dados de card a partir dos dados da API
+      const processedSummary: SummaryData = {
+        leads: {
+          count: rawData.leads?.current || 0,
+          previousCount: rawData.leads?.previous || 0,
+          percentage: rawData.leads?.percentage || 0,
+          isPositive: rawData.leads?.is_increasing !== false,
+          isComparable: !!rawData.leads?.previous && rawData.leads.previous > 0
         },
-        previous: {
-          leads: previousLeadsCount,
-          clients: previousClientsCount,
-          sessions: previousSessionsCount,
-          conversions: previousConversionRate
-        }
-      });
-    } else {
-      // Se estiver carregando, atualizar o estado para mostrar o loader
-      setSummaryData(prev => ({ ...prev, isLoading: dashboardData.isLoading ?? true }));
-    }
-  }, [dashboardData, previousPeriodData, dateRange, getPreviousPeriodLabel]);
-  
-  // Calcula métricas por tipo
-  const calculateMetric = (current: number, previous: number): CardData => {
-    // Verificar se é possível fazer uma comparação válida
-    const isComparable = previous > 0;
-    
-    // Se o valor anterior for zero, não é possível calcular a porcentagem
-    if (!isComparable) {
-      return {
-        count: current,
-        previousCount: previous, // Armazenar o valor anterior mesmo que seja zero
-        percentage: 0,
-        isPositive: current > 0,
-        isComparable: false
+        clients: defaultSummaryData.clients, // Manter o padrão para clients
+        sessions: {
+          count: rawData.sessions?.current || 0,
+          previousCount: rawData.sessions?.previous || 0,
+          percentage: rawData.sessions?.percentage || 0,
+          isPositive: rawData.sessions?.is_increasing !== false,
+          isComparable: !!rawData.sessions?.previous && rawData.sessions.previous > 0
+        },
+        conversions: {
+          count: rawData.conversion_rate?.current || 0,
+          previousCount: rawData.conversion_rate?.previous || 0,
+          percentage: rawData.conversion_rate?.percentage || 0,
+          isPositive: rawData.conversion_rate?.is_increasing !== false,
+          isComparable: !!rawData.conversion_rate?.previous && rawData.conversion_rate.previous > 0
+        },
+        isLoading: false,
+        previousPeriodLabel: determinePreviousPeriodLabel(rawData)
       };
+      
+      setSummaryData(processedSummary);
+      return;
     }
     
-    // Calcular a variação percentual: ((valorAtual - valorAnterior) / valorAnterior) * 100
-    const percentChange = ((current - previous) / previous) * 100;
+    // Se não temos dados, mostrar dados vazios
+    setSummaryData({
+      ...defaultSummaryData,
+      isLoading: false
+    });
+  }, [dashboardData]);
+
+  // Função simplificada para determinar o rótulo do período anterior
+  const determinePreviousPeriodLabel = (data: any): string => {
+    if (!data || !data.filters) return "período anterior";
     
-    return {
-      count: current,
-      previousCount: previous,
-      percentage: Math.abs(Math.round(percentChange * 10) / 10), // Arredondar para 1 casa decimal
-      isPositive: percentChange >= 0,
-      isComparable: true
-    };
+    // Se há informações sobre o tipo de período, usar diretamente
+    if (data.period_type) {
+      const periodMap: Record<string, string> = {
+        'day': 'dia anterior',
+        'week': 'semana anterior',
+        'month': 'mês anterior',
+        'quarter': 'trimestre anterior',
+        'year': 'ano anterior'
+      };
+      
+      return periodMap[data.period_type] || 'período anterior';
+    }
+    
+    // Se não tiver informação de tipo, tentar calcular pelo período
+    if (data.filters.from && data.filters.to) {
+      try {
+        const startDate = new Date(data.filters.from);
+        const endDate = new Date(data.filters.to);
+        const daysDiff = Math.round((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+        
+        if (daysDiff <= 1) return "dia anterior";
+        if (daysDiff <= 7) return "semana anterior";
+        if (daysDiff <= 31) return "mês anterior";
+        if (daysDiff <= 90) return "trimestre anterior";
+      } catch (e) {
+        // Em caso de erro, retornar o padrão
+      }
+    }
+    
+    return "período anterior";
   };
 
   // Componente para exibir a variação percentual com ícone e tooltip
@@ -323,18 +309,10 @@ export default function SummaryCards({
           </CardHeader>
           <CardContent className="space-y-1">
             <div className="text-3xl font-bold">
-              {summaryData.isLoading ? (
-                <span>Carregando...</span>
-              ) : (
-                <>{summaryData.clients.count}%</>
-              )}
+              <span>Em breve</span>
             </div>
             <div className="text-xs text-muted-foreground flex items-center gap-1">
-              {summaryData.isLoading ? (
-                <span>Calculando...</span>
-              ) : (
-                <PercentageVariation data={summaryData.clients} label="connect rate" />
-              )} em relação ao {summaryData.previousPeriodLabel}
+              <span>Funcionalidade em desenvolvimento</span>
             </div>
             <div className="mt-2 rounded bg-gray-50 px-2 py-1">
               <p className="text-xs text-gray-400 italic">Funcionalidade em desenvolvimento</p>

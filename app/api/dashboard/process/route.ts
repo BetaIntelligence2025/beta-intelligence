@@ -11,39 +11,176 @@ interface DateRange {
 // Make cache dynamic based on request
 export const dynamic = 'force-dynamic';
 
+/**
+ * Função helper para formatar datas para exibição
+ */
+function formatPeriod(date: string, timeFrame: TimeFrame): string {
+  try {
+    // Se a data já estiver no formato ISO, usar parseISO
+    const parsedDate = date.includes('T') ? parseISO(date) : parse(date, 'yyyy-MM-dd', new Date());
+    
+    switch (timeFrame) {
+      case 'Daily':
+        return format(parsedDate, 'dd/MM', { locale: ptBR });
+      case 'Weekly':
+        return format(parsedDate, "'Sem' w", { locale: ptBR });
+      case 'Monthly':
+        return format(parsedDate, 'MMM/yy', { locale: ptBR });
+      case 'Yearly':
+        return format(parsedDate, 'yyyy');
+      default:
+        return format(parsedDate, 'dd/MM', { locale: ptBR });
+    }
+  } catch (e) {
+    console.error('Erro ao formatar data:', e);
+    return date;
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
-    // Parse the request body
-    const { data, timeFrame, dateRange } = await request.json();
+    // Parse request body
+    const body = await request.json();
+    const { data, timeFrame } = body;
     
-    // Early return if no data
-    if (!data || !Array.isArray(data) || data.length === 0) {
-      return NextResponse.json({ error: 'No data provided' }, { status: 400 });
-    }
-
-    try {
-      // Process data
-      const processedData = await processDataWithTimeFrame(data, timeFrame, dateRange);
-      
-      // Return the processed data as JSON
-      return NextResponse.json(processedData, {
-        status: 200,
-        headers: {
-          'Cache-Control': 'max-age=60, stale-while-revalidate=600',
-        }
-      });
-    } catch (error) {
-      console.error('Error processing data:', error);
-      return NextResponse.json({ 
-        error: `Processing error: ${error instanceof Error ? error.message : 'Unknown error'}`
-      }, { status: 500 });
+    console.log('Body recebido:', JSON.stringify(body, null, 2));
+    
+    // Verificar se os dados estão no formato antigo ou novo
+    // Se for formato antigo: array de objetos {date, count, type}
+    // Se for formato novo: objeto com sessions_series, leads_series, etc.
+    const isNewFormat = !Array.isArray(data) && data.sessions_series;
+    
+    if (isNewFormat) {
+      console.log('Detectado novo formato de dados da API unificada');
+      return processNewFormat(data, timeFrame);
+    } else {
+      console.log('Processando formato antigo de dados');
+      return processOldFormat(data, timeFrame);
     }
   } catch (error) {
-    console.error('Error in process route:', error);
-    return NextResponse.json({ 
-      error: `Request error: ${error instanceof Error ? error.message : 'Unknown error'}`
-    }, { status: 500 });
+    console.error('Erro ao processar dados:', error);
+    return NextResponse.json(
+      { error: 'Erro ao processar dados', details: error instanceof Error ? error.message : String(error) },
+      { status: 500 }
+    );
   }
+}
+
+/**
+ * Processa dados no formato antigo (array de objetos)
+ */
+function processOldFormat(data: any[], timeFrame: TimeFrame) {
+  // Agrupar por datas
+  const groupedByDate: Record<string, Record<string, number>> = {};
+  
+  // Primeiro passo: agrupar dados por data
+  data.forEach(item => {
+    const dateKey = item.date.split('T')[0]; // remover parte do horário, se houver
+    
+    if (!groupedByDate[dateKey]) {
+      groupedByDate[dateKey] = {};
+    }
+    
+    // Usar o tipo como chave para os valores
+    groupedByDate[dateKey][item.type] = item.count;
+  });
+  
+  // Processar os dados para gráfico
+  const result = Object.entries(groupedByDate).map(([date, values]) => {
+    // Formatar a data com base no timeFrame
+    const formattedPeriod = formatPeriod(date, timeFrame);
+    
+    return {
+      period: formattedPeriod,
+      date: date,
+      sessions: values.sessions || 0,
+      leads: values.leads || 0,
+      conversions: values.conversions || 0
+    };
+  });
+  
+  // Ordenar por data
+  result.sort((a, b) => a.date.localeCompare(b.date));
+  
+  // Retornar resposta JSON
+  return NextResponse.json(result);
+}
+
+/**
+ * Processa dados no formato novo (objeto com sessions_series, leads_series, etc.)
+ */
+function processNewFormat(data: any, timeFrame: TimeFrame) {
+  console.log('Processando dados no novo formato:', JSON.stringify(data, null, 2));
+  
+  // Obter todas as datas únicas de todas as séries
+  const allDates = new Set<string>();
+  
+  // Adicionar datas das séries atuais
+  if (data.sessions_series?.current) {
+    data.sessions_series.current.forEach((item: {date: string}) => allDates.add(item.date));
+  }
+  if (data.leads_series?.current) {
+    data.leads_series.current.forEach((item: {date: string}) => allDates.add(item.date));
+  }
+  
+  // Adicionar datas das séries anteriores para eventual comparação
+  if (data.sessions_series?.previous) {
+    data.sessions_series.previous.forEach((item: {date: string}) => allDates.add(item.date));
+  }
+  if (data.leads_series?.previous) {
+    data.leads_series.previous.forEach((item: {date: string}) => allDates.add(item.date));
+  }
+  
+  // Converter para array ordenado
+  const sortedDates = Array.from(allDates).sort();
+  console.log('Datas ordenadas:', sortedDates);
+  
+  // Criar objeto para cada data com os valores correspondentes
+  const result = sortedDates.map(date => {
+    // Encontrar valores correspondentes em cada série
+    const sessionItem = data.sessions_series?.current?.find((item: {date: string}) => item.date === date);
+    const leadItem = data.leads_series?.current?.find((item: {date: string}) => item.date === date);
+    
+    // Buscar nos dados do período anterior se não encontrou nos atuais (pode ocorrer em comparações)
+    const sessionValue = sessionItem ? sessionItem.value : 
+                          (data.sessions_series?.previous?.find((item: {date: string}) => item.date === date)?.value || 0);
+    
+    const leadValue = leadItem ? leadItem.value : 
+                       (data.leads_series?.previous?.find((item: {date: string}) => item.date === date)?.value || 0);
+    
+    // Calcular taxa de conversão para esta data
+    let conversionValue = 0;
+    if (sessionValue > 0 && leadValue > 0) {
+      conversionValue = Math.round((leadValue / sessionValue) * 100);
+    } else if (data.conversion_rate) {
+      // Usar valor global se não tiver por data
+      conversionValue = data.conversion_rate.current;
+    }
+    
+    // Formatar a data com base no timeFrame
+    const formattedPeriod = formatPeriod(date, timeFrame);
+    
+    return {
+      period: formattedPeriod,
+      date: date,
+      sessions: sessionValue,
+      leads: leadValue,
+      conversions: conversionValue
+    };
+  });
+  
+  console.log(`Processados ${result.length} pontos de dados para o gráfico`);
+  
+  // Remover datas sem valores significativos
+  const filteredResult = result.filter(item => item.sessions > 0 || item.leads > 0);
+  
+  // Ordenar por data
+  filteredResult.sort((a, b) => a.date.localeCompare(b.date));
+  
+  console.log(`Retornando ${filteredResult.length} pontos após filtragem`);
+  
+  // Retornar resposta JSON
+  return NextResponse.json(filteredResult);
 }
 
 // Separate data processing logic for better organization

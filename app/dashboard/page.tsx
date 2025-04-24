@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import SummaryCards from '@/components/dashboard/summary-cards';
 import VisualizationByPeriod from './visualization-client';
 import { DateFilterButton, DateRange } from './date-filter-button';
-import { TimeFrame } from './types';
+import { TimeFrame, DashboardState, DashboardDataItem } from './types';
 import { CardType } from '@/components/dashboard/summary-cards';
 import { Button } from '@/components/ui/button';
 import { RefreshCw, Download, ChevronDown } from 'lucide-react';
@@ -59,7 +59,7 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState(urlTab);
   
   const [selectedCard, setSelectedCard] = useState<CardType>(null);
-  const [dashboardData, setDashboardData] = useState<any>(null);
+  const [dashboardData, setDashboardData] = useState<DashboardState | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   
@@ -70,7 +70,7 @@ export default function Dashboard() {
   const [activeFunnelId, setActiveFunnelId] = useState<string | null>(searchParams.get('funnel_id') || null);
   
   // Estado para armazenar os dados do período anterior
-  const [previousPeriodData, setPreviousPeriodData] = useState<any>(null);
+  const [previousPeriodData, setPreviousPeriodData] = useState<DashboardState | null>(null);
   const [isLoadingPreviousPeriod, setIsLoadingPreviousPeriod] = useState(false);
   
   // Parse default time frame from URL or use "Daily"
@@ -286,50 +286,33 @@ export default function Dashboard() {
 
     setIsLoading(true);
     try {
-      // Fetch data using API endpoint instead of server action
+      // Construir parâmetros para o endpoint unificado
       const params = new URLSearchParams();
-      params.set('timeFrame', timeFrame);
       
+      // Adicionar parâmetros de data no formato YYYY-MM-DD
       if (dateRange) {
-        params.set('from', dateRange.from);
-        params.set('to', dateRange.to);
+        const fromDate = dateRange.from.split('T')[0];
+        const toDate = dateRange.to.split('T')[0];
+        
+        params.set('from', fromDate);
+        params.set('to', toDate);
+        
         if (dateRange.time_from) params.set('time_from', dateRange.time_from);
         if (dateRange.time_to) params.set('time_to', dateRange.time_to);
+      } else {
+        // Se não houver dateRange, usar a data atual
+        const today = new Date();
+        const formattedDate = today.toISOString().split('T')[0];
+        params.set('from', formattedDate);
+        params.set('to', formattedDate);
       }
       
-      // Always add landingPage parameter for consistency
+      // Adicionar outros parâmetros
+      params.set('time_frame', timeFrame.toLowerCase());
       params.set('landingPage', 'lp.vagasjustica.com.br');
       
-      // Add cache busting parameter
-      params.set('_t', Date.now().toString());
-      
-      // Iniciar o carregamento do período anterior em paralelo
-      let previousPeriodPromise = null;
-      if (dateRange) {
-        const previousPeriod = calculatePreviousPeriod(dateRange);
-        if (previousPeriod) {
-          setIsLoadingPreviousPeriod(true);
-          const prevParams = new URLSearchParams();
-          prevParams.set('timeFrame', timeFrame);
-          prevParams.set('from', previousPeriod.from);
-          prevParams.set('to', previousPeriod.to);
-          if (previousPeriod.time_from) prevParams.set('time_from', previousPeriod.time_from);
-          if (previousPeriod.time_to) prevParams.set('time_to', previousPeriod.time_to);
-          prevParams.set('landingPage', 'lp.vagasjustica.com.br');
-          prevParams.set('_t', Date.now().toString());
-          
-          previousPeriodPromise = fetch(`/api/dashboard/data?${prevParams.toString()}`, {
-            headers: {
-              'Accept': 'application/json',
-              'Cache-Control': 'no-cache'
-            },
-            cache: 'no-store'
-          });
-        }
-      }
-      
-      // Fazer a requisição para dados do período atual
-      const response = await fetch(`/api/dashboard/data?${params.toString()}`, {
+      // Usar o endpoint unificado
+      const response = await fetch(`/api/dashboard/unified?${params.toString()}`, {
         headers: {
           'Accept': 'application/json',
           'Cache-Control': 'no-cache'
@@ -339,30 +322,59 @@ export default function Dashboard() {
       });
       
       if (!response.ok) {
-        throw new Error(`API responded with status ${response.status}`);
+        const errorText = await response.text();
+        throw new Error(`API responded with status ${response.status}: ${errorText}`);
       }
       
-      const newData = await response.json();
-      setDashboardData(newData);
+      const responseData = await response.json();
       
-      // Processar a resposta do período anterior se foi iniciada
-      if (previousPeriodPromise) {
-        try {
-          const prevResponse = await previousPeriodPromise;
-          if (prevResponse.ok) {
-            const prevData = await prevResponse.json();
-            setPreviousPeriodData(prevData);
-            console.log('Dados do período anterior carregados (paralelo):', prevData);
-          }
-        } catch (error) {
-          console.error('Erro ao buscar dados do período anterior (paralelo):', error);
-          setPreviousPeriodData(null);
-        } finally {
-          setIsLoadingPreviousPeriod(false);
-        }
+      if (!responseData.data) {
+        throw new Error('Formato de resposta inválido: campo "data" não encontrado');
       }
+      
+      // Simplificar: usar os dados brutos diretamente
+      setDashboardData({
+        data: [],
+        isLoading: false,
+        timeFrame,
+        summary: {
+          sessions: responseData.data.sessions,
+          leads: responseData.data.leads,
+          conversions: responseData.data.conversion_rate,
+          clients: 0
+        },
+        raw: responseData.data
+      });
+      
+      // Atualizar dados do período anterior (sem transformações)
+      setPreviousPeriodData({
+        data: [],
+        isLoading: false,
+        period: responseData.data.filters ? {
+          from: responseData.data.filters.previous_from,
+          to: responseData.data.filters.previous_to
+        } : null,
+        raw: responseData.data
+      });
+      
+      setIsLoadingPreviousPeriod(false);
     } catch (error) {
-      console.error('Erro ao buscar dados do período atual:', error);
+      // Definir estado com erro para feedback na UI, sem usar valores padrão
+      setDashboardData({
+        data: [],
+        isLoading: false,
+        errors: error instanceof Error ? error.message : 'Erro desconhecido ao carregar dados',
+        summary: {
+          sessions: 0,
+          leads: 0,
+          conversions: 0,
+          clients: 0
+        }
+      });
+      
+      // Limpar dados do período anterior
+      setPreviousPeriodData(null);
+      setIsLoadingPreviousPeriod(false);
     } finally {
       setIsLoading(false);
     }
@@ -370,7 +382,7 @@ export default function Dashboard() {
   
   // Função para atualizar os dados de funis
   async function refreshFunnelData(professionId: string | null, funnelId: string | null) {
-    // Prevent duplicate requests for the same data
+    // Evitar requisições duplicadas para os mesmos dados
     if (isLoading) return;
     
     // Preservar o estado de seleção visual antes de iniciar o carregamento
@@ -378,68 +390,42 @@ export default function Dashboard() {
     
     setIsLoading(true);
     try {
-      // Use the existing dashboard/data route which already handles dates properly
+      // Construir parâmetros para o endpoint unificado
       const params = new URLSearchParams();
       
-      // Add date parameters from the URL
+      // Adicionar parâmetros de data no formato YYYY-MM-DD
       if (dateRange) {
-        if (dateRange.from) params.set('from', dateRange.from);
-        if (dateRange.to) params.set('to', dateRange.to);
+        const fromDate = dateRange.from.split('T')[0];
+        const toDate = dateRange.to.split('T')[0];
+        
+        params.set('from', fromDate);
+        params.set('to', toDate);
+        
         if (dateRange.time_from) params.set('time_from', dateRange.time_from);
         if (dateRange.time_to) params.set('time_to', dateRange.time_to);
+      } else {
+        // Se não houver dateRange, usar a data atual
+        const today = new Date();
+        const formattedDate = today.toISOString().split('T')[0];
+        params.set('from', formattedDate);
+        params.set('to', formattedDate);
       }
       
-      // Add timeFrame parameter
-      params.set('timeFrame', timeFrame);
+      // Adicionar parâmetros de filtro
+      params.set('time_frame', timeFrame.toLowerCase());
+      params.set('landingPage', 'lp.vagasjustica.com.br');
       
-      // Add ID filters based on selection
-      if (funnelId) {
-        params.set('funnel_id', funnelId);
-      } else if (professionId) {
+      // Adicionar ID de profissão e funil, se disponíveis
+      if (professionId) {
         params.set('profession_id', professionId);
       }
       
-      // Always include landingPage parameter for consistency
-      params.set('landingPage', 'lp.vagasjustica.com.br');
-      
-      // Add cache busting parameter
-      params.set('_t', Date.now().toString());
-      
-      // Iniciar o carregamento do período anterior em paralelo
-      let previousPeriodPromise = null;
-      if (dateRange) {
-        const previousPeriod = calculatePreviousPeriod(dateRange);
-        if (previousPeriod) {
-          setIsLoadingPreviousPeriod(true);
-          const prevParams = new URLSearchParams();
-          prevParams.set('timeFrame', timeFrame);
-          prevParams.set('from', previousPeriod.from);
-          prevParams.set('to', previousPeriod.to);
-          if (previousPeriod.time_from) prevParams.set('time_from', previousPeriod.time_from);
-          if (previousPeriod.time_to) prevParams.set('time_to', previousPeriod.time_to);
-          
-          // Adicionar os mesmos filtros de profissão e funil
-          if (funnelId) {
-            prevParams.set('funnel_id', funnelId);
-          } else if (professionId) {
-            prevParams.set('profession_id', professionId);
-          }
-          
-          prevParams.set('landingPage', 'lp.vagasjustica.com.br');
-          prevParams.set('_t', Date.now().toString());
-          
-          previousPeriodPromise = fetch(`/api/dashboard/data?${prevParams.toString()}`, {
-            headers: {
-              'Accept': 'application/json',
-              'Cache-Control': 'no-cache'
-            },
-            cache: 'no-store'
-          });
-        }
+      if (funnelId) {
+        params.set('funnel_id', funnelId);
       }
       
-      // Fetch dashboard data
-      const response = await fetch(`/api/dashboard/data?${params.toString()}`, {
+      // Usar o endpoint unificado
+      const response = await fetch(`/api/dashboard/unified?${params.toString()}`, {
         headers: {
           'Accept': 'application/json',
           'Cache-Control': 'no-cache'
@@ -448,54 +434,69 @@ export default function Dashboard() {
       });
       
       if (!response.ok) {
-        throw new Error(`API responded with status ${response.status}`);
+        const errorText = await response.text();
+        throw new Error(`API responded with status ${response.status}: ${errorText}`);
       }
       
-      const dashboardData = await response.json();
+      const responseData = await response.json();
       
-      // Set dashboard data with source information
-      const newData = {
-        ...dashboardData,
+      if (!responseData.data) {
+        throw new Error('Formato de resposta inválido: campo "data" não encontrado');
+      }
+      
+      // Simplificar: usar os dados brutos diretamente
+      setDashboardData({
+        data: [],
+        isLoading: false,
         source: funnelId ? 'funnel' : 'profession',
         funnel_id: funnelId,
-        profession_id: professionId
-      };
+        profession_id: professionId,
+        timeFrame,
+        summary: {
+          sessions: responseData.data.sessions,
+          leads: responseData.data.leads,
+          conversions: responseData.data.conversion_rate,
+          clients: 0
+        },
+        raw: responseData.data
+      });
       
-      setDashboardData(newData);
+      // Atualizar dados do período anterior
+      setPreviousPeriodData({
+        data: [],
+        isLoading: false,
+        period: responseData.data.filters ? {
+          from: responseData.data.filters.previous_from,
+          to: responseData.data.filters.previous_to
+        } : null,
+        raw: responseData.data
+      });
       
-      // Processar a resposta do período anterior se foi iniciada
-      if (previousPeriodPromise) {
-        try {
-          const prevResponse = await previousPeriodPromise;
-          if (prevResponse.ok) {
-            const prevData = await prevResponse.json();
-            setPreviousPeriodData(prevData);
-            console.log('Dados do período anterior carregados (paralelo):', prevData);
-          }
-        } catch (error) {
-          console.error('Erro ao buscar dados do período anterior (paralelo):', error);
-          setPreviousPeriodData(null);
-        } finally {
-          setIsLoadingPreviousPeriod(false);
-        }
-      }
+      setIsLoadingPreviousPeriod(false);
       
       // Restaurar o estado de seleção visual após carregar os dados
       setActiveFunnelId(currentActiveFunnelId);
     } catch (error) {
-      // Set some basic data even on error to prevent continuous retries
-      if (!dashboardData) {
-        setDashboardData({
-          source: funnelId ? 'funnel' : 'profession',
-          funnel_id: funnelId,
-          profession_id: professionId,
-          sessions_count: 0,
-          leads_count: 0,
-          data: [],
-          timeFrame,
-          error: true
-        });
-      }
+      // Definir dados básicos mesmo em caso de erro
+      setDashboardData({
+        data: [],
+        isLoading: false,
+        source: funnelId ? 'funnel' : 'profession',
+        funnel_id: funnelId,
+        profession_id: professionId,
+        timeFrame,
+        errors: error instanceof Error ? error.message : 'Erro desconhecido ao carregar dados de funil',
+        summary: {
+          sessions: 0,
+          leads: 0,
+          conversions: 0,
+          clients: 0
+        }
+      });
+      
+      // Limpar dados do período anterior
+      setPreviousPeriodData(null);
+      setIsLoadingPreviousPeriod(false);
       
       // Restaurar o estado de seleção visual mesmo em caso de erro
       setActiveFunnelId(currentActiveFunnelId);
@@ -503,109 +504,6 @@ export default function Dashboard() {
       setIsLoading(false);
     }
   }
-  
-  // Função para calcular o período anterior com base no período atual
-  const calculatePreviousPeriod = useCallback((currentDateRange?: DateRangeWithString): PreviousPeriod | null => {
-    if (!currentDateRange || !currentDateRange.from) {
-      return null;
-    }
-    
-    try {
-      // Converter strings para objetos Date
-      const currentFromDate = new Date(currentDateRange.from);
-      const currentToDate = currentDateRange.to ? new Date(currentDateRange.to) : new Date();
-      
-      // Calcular a duração do período atual em dias
-      const periodDurationDays = differenceInDays(currentToDate, currentFromDate) + 1; // +1 para incluir o dia atual
-      
-      // Calcular o período anterior (mesmo tamanho que o atual, mas anterior)
-      const previousFromDate = subDays(currentFromDate, periodDurationDays);
-      const previousToDate = subDays(currentToDate, periodDurationDays);
-      
-      // Formatar as datas no formato ISO string para a API
-      const previousFrom = format(previousFromDate, "yyyy-MM-dd'T'00:00:00'-03:00'");
-      const previousTo = format(previousToDate, "yyyy-MM-dd'T'23:59:59'-03:00'");
-      
-      // Retornar o período anterior formatado
-      return {
-        from: previousFrom,
-        to: previousTo,
-        // Preservar os horários se estiverem presentes
-        time_from: currentDateRange.time_from || null,
-        time_to: currentDateRange.time_to || null
-      };
-    } catch (error) {
-      console.error('Erro ao calcular período anterior:', error);
-      return null;
-    }
-  }, []);
-
-  // Função para buscar dados do período anterior
-  const fetchPreviousPeriodData = useCallback(async (currentPeriodData?: any) => {
-    if (!dateRange || !currentPeriodData) {
-      setPreviousPeriodData(null);
-      return;
-    }
-    
-    const previousPeriod = calculatePreviousPeriod(dateRange);
-    if (!previousPeriod) {
-      setPreviousPeriodData(null);
-      return;
-    }
-    
-    setIsLoadingPreviousPeriod(true);
-    try {
-      // Construir parâmetros para a API usando o período anterior
-      const params = new URLSearchParams();
-      params.set('timeFrame', timeFrame);
-      params.set('from', previousPeriod.from);
-      params.set('to', previousPeriod.to);
-      if (previousPeriod.time_from) params.set('time_from', previousPeriod.time_from);
-      if (previousPeriod.time_to) params.set('time_to', previousPeriod.time_to);
-      
-      // Adicionar os mesmos filtros de profissão e funil do período atual
-      if (currentPeriodData.funnel_id) {
-        params.set('funnel_id', currentPeriodData.funnel_id);
-      } else if (currentPeriodData.profession_id) {
-        params.set('profession_id', currentPeriodData.profession_id);
-      }
-      
-      // Adicionar landingPage para consistência
-      params.set('landingPage', 'lp.vagasjustica.com.br');
-      
-      // Adicionar parâmetro para evitar cache
-      params.set('_t', Date.now().toString());
-      
-      // Fazer a requisição para a API
-      const response = await fetch(`/api/dashboard/data?${params.toString()}`, {
-        headers: {
-          'Accept': 'application/json',
-          'Cache-Control': 'no-cache'
-        },
-        cache: 'no-store'
-      });
-      
-      if (!response.ok) {
-        throw new Error(`API responded with status ${response.status}`);
-      }
-      
-      // Processar a resposta
-      const data = await response.json();
-      
-      // Atualizar o estado com os dados do período anterior
-      setPreviousPeriodData(data);
-      
-      console.log('Dados do período anterior carregados:', {
-        previousPeriod,
-        data
-      });
-    } catch (error) {
-      console.error('Erro ao buscar dados do período anterior:', error);
-      setPreviousPeriodData(null);
-    } finally {
-      setIsLoadingPreviousPeriod(false);
-    }
-  }, [dateRange, timeFrame, calculatePreviousPeriod]);
   
   // Função para baixar a tela atual como imagem
   async function downloadDashboard() {
@@ -823,17 +721,17 @@ export default function Dashboard() {
 
         <TabsContent value="geral" className={isLoading ? "opacity-60 pointer-events-none" : ""}>
           <SummaryCards 
-            dashboardData={dashboardData} 
+            dashboardData={dashboardData || undefined} 
             onCardSelect={handleCardSelect}
             selectedCard={selectedCard}
             dateRange={dateRange}
-            previousPeriodData={previousPeriodData}
+            previousPeriodData={previousPeriodData || undefined}
           />
           
           <div className="mt-4">
             <VisualizationByPeriod 
               title="Visualização por Período" 
-              dashboardData={dashboardData}
+              dashboardData={dashboardData || undefined}
               selectedCard={selectedCard}
             />
           </div>
@@ -923,17 +821,17 @@ export default function Dashboard() {
           {selectedProfession && (
             <>
               <SummaryCards 
-                dashboardData={dashboardData} 
+                dashboardData={dashboardData || undefined} 
                 onCardSelect={handleCardSelect}
                 selectedCard={selectedCard}
                 dateRange={dateRange}
-                previousPeriodData={previousPeriodData}
+                previousPeriodData={previousPeriodData || undefined}
               />
               
               <div className="mt-4">
                 <VisualizationByPeriod 
                   title=""
-                  dashboardData={dashboardData}
+                  dashboardData={dashboardData || undefined}
                   selectedCard={selectedCard}
                 />
               </div>

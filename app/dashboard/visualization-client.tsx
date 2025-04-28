@@ -59,11 +59,6 @@ const MemoizedChart = memo(function Chart({
 
   return (
         <>
-          {isHourlyData && (
-            <div className="text-xs text-gray-500 ml-8 mb-2">
-              Visualização por hora (dados de um único dia)
-            </div>
-          )}
           <ChartContainer className="w-full lg:h-96" config={chartConfig}>
             <LineChart
               accessibilityLayer
@@ -259,55 +254,48 @@ export default function VisualizationByPeriod(props: VisualizationByPeriodProps)
   const processChartData = useCallback((data: any, currentTimeFrame: TimeFrame) => {
     if (!data) return [];
     
-    // Dados já processados, apenas formatar para o gráfico
-    const graphData: {
-      period: string;
-      date: string;
-      sessions: number;
-      leads: number;
-      conversions: number;
-    }[] = [];
-    
     // Verificar se é um único dia com dados por hora disponíveis
     if (data.hourly_data && 
-        data.period_counts && 
-        Object.keys(data.period_counts).length === 1 && 
-        data.hourly_data.sessions_by_hour) {
+        data.hourly_data.sessions_by_hour && 
+        Object.keys(data.hourly_data.sessions_by_hour).length > 0) {
       
-      console.log('Processando visualização por hora para um único dia');
       
       // Converter dados por hora em formato para o gráfico
       return Object.entries(data.hourly_data.sessions_by_hour)
         .map(([hour, sessionsCount]) => {
           // Formatar hora para display (00 a 23)
-          const hourDisplay = `${hour}h`;
+          const hourDisplay = `${hour.padStart(2, '0')}h`;
+          
+          // Garantir que os valores de leads e conversões estejam disponíveis
+          const leadsCount = Number(data.hourly_data?.leads_by_hour?.[hour]) || 0;
+          const conversionRate = Number(data.hourly_data?.conversion_rate_by_hour?.[hour]) || 0;
+          
+          console.log(`Hora ${hourDisplay}: Sessões=${sessionsCount}, Leads=${leadsCount}, Conversão=${conversionRate}%`);
           
           return {
             period: hourDisplay,
             date: hour, // Guardar a hora original como referência
-            // Acessar dados por hora diretamente
             sessions: Number(sessionsCount) || 0,
-            leads: Number(data.hourly_data?.leads_by_hour?.[hour]) || 0,
-            conversions: Number(data.hourly_data?.conversion_rate_by_hour?.[hour]) || 0
+            leads: leadsCount,
+            conversions: conversionRate
           };
         })
         .sort((a, b) => a.date.localeCompare(b.date)); // Ordenar por hora
     }
     
-    // Caso padrão: usar period_counts para dias/semanas/meses
-    if (data.period_counts && typeof data.period_counts === 'object') {
-      return Object.entries(data.period_counts)
+    // Caso para múltiplos períodos (dias/semanas/meses)
+    if (data.sessions_by_day && typeof data.sessions_by_day === 'object') {
+      return Object.entries(data.sessions_by_day)
         .map(([date, sessionsCount]) => {
           const parts = date.split('-');
           const formattedPeriod = currentTimeFrame === 'Daily' ? 
-            `${parts[2]}/${parts[1]}` : 
+            `${parts[2]}/${parts[1]}/${parts[0]}` : 
             (currentTimeFrame === 'Monthly' ? 
               `${parts[1]}/${parts[0]}` : date);
           
           return {
             period: formattedPeriod,
             date,
-            // Acesso direto aos dados sem validações complexas
             sessions: Number(sessionsCount) || 0,
             leads: Number(data.leads_by_day?.[date]) || 0,
             conversions: Number(data.conversion_rate_by_day?.[date]) || 0
@@ -316,10 +304,28 @@ export default function VisualizationByPeriod(props: VisualizationByPeriodProps)
         .sort((a, b) => a.date.localeCompare(b.date));
     }
     
-    // Log de erro para ajudar na depuração
-    console.error('Formato de dados inválido para o gráfico:', data);
+    // Verificar se estamos usando o formato antigo com period_counts
+    if (data.period_counts && typeof data.period_counts === 'object') {
+      return Object.entries(data.period_counts)
+        .map(([date, sessionsCount]) => {
+          const parts = date.split('-');
+          const formattedPeriod = currentTimeFrame === 'Daily' ? 
+            `${parts[2]}/${parts[1]}/${parts[0]}` : 
+            (currentTimeFrame === 'Monthly' ? 
+              `${parts[1]}/${parts[0]}` : date);
+          
+          return {
+            period: formattedPeriod,
+            date,
+            sessions: Number(sessionsCount) || 0,
+            leads: Number(data.leads_by_day?.[date]) || 0,
+            conversions: Number(data.conversion_rate_by_day?.[date]) || 0
+          };
+        })
+        .sort((a, b) => a.date.localeCompare(b.date));
+    }
     
-    // Fallback: retornar array vazio quando não há dados válidos
+    console.error('Formato de dados inválido para o gráfico:', data);
     return [];
   }, []);
   
@@ -453,11 +459,6 @@ export default function VisualizationByPeriod(props: VisualizationByPeriodProps)
           <CardHeader className="relative">
             <CardTitle>
               {title}
-              {isSingleDayView && (
-                <span className="text-xs text-gray-500 ml-2 font-normal">
-                  (visualização por hora disponível)
-                </span>
-              )}
             </CardTitle>
             <div className="absolute end-4 top-3">
               <Select value={timeFrame} onValueChange={handleTimeFrameChange}>

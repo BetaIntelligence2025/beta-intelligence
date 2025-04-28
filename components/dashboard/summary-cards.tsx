@@ -263,32 +263,27 @@ export default function SummaryCards({
       );
     }
     
+    // Formatar número com vírgula como separador decimal para PT-BR
+    const formatPercentage = (num: number): string => {
+      return num.toFixed(2).replace('.', ',');
+    };
+    
+    // Label para mostrar o valor anterior (com % se for conversão)
+    const previousValueFormatted = label === 'conversão' 
+      ? `${data.previousCount}%` 
+      : `${data.previousCount}`;
+    
+    // Texto descritivo baseado em crescimento ou queda
+    const variationText = data.isPositive 
+      ? `↑ ${formatPercentage(data.percentage)}% de crescimento sobre os ${previousValueFormatted} anteriores` 
+      : `↓ ${formatPercentage(data.percentage)}% de queda em relação aos ${previousValueFormatted} anteriores`;
+    
     return (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span className={cn(
-              "flex items-center",
-              data.isPositive ? "text-green-600" : "text-red-600"
-            )}>
-              {data.isPositive ? (
-                <ArrowUp className="mr-1 size-3" />
-              ) : (
-                <ArrowDown className="mr-1 size-3" />
-              )}
-              {data.percentage}%
-              <HelpCircle className="ml-1 size-3" />
-            </span>
-          </TooltipTrigger>
-          <TooltipContent>
-            <div className="space-y-1 max-w-xs text-xs">
-              <div><strong>Período atual:</strong> {data.count}</div>
-              <div><strong>{summaryData.previousPeriodLabel}:</strong> {data.previousCount}</div>
-              <div><strong>Variação:</strong> {data.isPositive ? "+" : "-"}{data.percentage}%</div>
-            </div>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+      <span className={cn(
+        data.isPositive ? "text-green-600" : "text-red-600"
+      )}>
+        {variationText}
+      </span>
     );
   };
 

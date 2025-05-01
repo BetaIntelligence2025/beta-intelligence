@@ -134,22 +134,31 @@ export function Pagination({
           value={String(perPage)}
           onValueChange={(value) => {
             if (onPerPageChange && !isLoading) {
-              const newPerPage = parseInt(value, 10);
-              onPerPageChange(newPerPage);
+              try {
+                const newPerPage = parseInt(value, 10);
+                if (newPerPage > 0) {
+                  setTimeout(() => {
+                    onPerPageChange(newPerPage);
+                  }, 50);
+                }
+              } catch (error) {
+                console.error('Error changing page size:', error);
+              }
             }
           }}
           disabled={isLoading}
         >
-          <SelectTrigger className="h-8 min-w-[100px] w-auto border-none">
+          <SelectTrigger className="h-8 min-w-[100px] w-auto">
             <SelectValue>{perPage} linhas</SelectValue>
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent align="center">
             <SelectItem value="10">10 linhas</SelectItem>
             <SelectItem value="25">25 linhas</SelectItem>
             <SelectItem value="50">50 linhas</SelectItem>
             <SelectItem value="100">100 linhas</SelectItem>
             <SelectItem value="500">500 linhas</SelectItem>
             <SelectItem value="1000">1000 linhas</SelectItem>
+            <SelectItem value="5000">5000 linhas</SelectItem>
           </SelectContent>
         </Select>
         

@@ -10,6 +10,25 @@ export interface Event {
   funnel_id: number;
   event_source: string;
   event_type: string;
+  // Properties for purchase events
+  event_propeties?: {
+    value: string;
+    order_id: string;
+    order_bump: string;
+    checkout_id: string;
+    final_value: string;
+    installments: string;
+    interest_fee: string;
+    product_name: string;
+    product_type: string;
+    payment_method: string;
+    origem_slug_ltp: string;
+    payment_gateway: string;
+    presented_upsell: string;
+    firepay_product_id: string;
+    presented_orderbump: string;
+    origem_description_ltp: string;
+  };
   // Direct location properties
   initialCountry?: string;
   initialRegion?: string;

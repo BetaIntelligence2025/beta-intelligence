@@ -299,11 +299,18 @@ export function EventsTable({
   const [exportProgress, setExportProgress] = useState(0)
   const tableContainerRef = useRef<HTMLDivElement>(null)
   const [rowHeight] = useState(46) // altura fixa das linhas
-  const [visibleRows, setVisibleRows] = useState(10) // valor padrão inicial
+  const [visibleRows, setVisibleRows] = useState(meta?.limit || 10) // usar o valor do meta como padrão
   const [shouldUpdateLimit, setShouldUpdateLimit] = useState(false)
   const [isColumnManagementOpen, setIsColumnManagementOpen] = useState(false)
   const [selectedRows, setSelectedRows] = useState<Record<string, boolean>>({})
   const [selectAll, setSelectAll] = useState(false)
+
+  // Atualizar visibleRows quando meta.limit mudar
+  useEffect(() => {
+    if (meta?.limit && meta.limit !== visibleRows) {
+      setVisibleRows(meta.limit);
+    }
+  }, [meta?.limit]);
 
   // Recupera filtros da URL - memoizado para evitar recriações desnecessárias
   const getFiltersFromUrl = useCallback(() => {

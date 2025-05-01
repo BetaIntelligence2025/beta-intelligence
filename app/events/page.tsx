@@ -1,7 +1,7 @@
 "use client";
 
 import { PageHeader } from "@/components/page-header";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { EventsTable } from "./events-table";
 import { createClient } from "@/utils/supabase/client";
 import { useState, useCallback, useEffect, useRef, Suspense } from "react";
@@ -18,16 +18,28 @@ const fetchEvents = async ({ queryKey }: any) => {
   const [_, page, limit, sortConfig, searchParamsString] = queryKey;
   const searchParams = new URLSearchParams(searchParamsString);
   
+  // Log request parameters
   console.log('Original search params for API request:', searchParamsString);
   
-  // Criar uma nova instância de URLSearchParams para a requisição
+  // Check if this is a large data request
+  const isLargeRequest = limit > 500;
+  if (isLargeRequest) {
+    console.log(`Handling large data request (${limit} rows)`);
+  }
+  
+  // Create a new URLSearchParams for the API request
   const params = new URLSearchParams();
   
-  // Adicionar apenas parâmetros básicos
+  // Add basic pagination parameters
   params.set('page', page.toString());
   params.set('limit', limit.toString());
   
-  // Adicionar parâmetros de ordenação
+  // Add larger timeout for large requests
+  if (isLargeRequest) {
+    params.set('timeout', '60000'); // 60-second timeout for large requests
+  }
+  
+  // Add sorting parameters
   if (sortConfig.column) {
     params.set('sortBy', sortConfig.column);
     if (sortConfig.direction) {
@@ -35,26 +47,36 @@ const fetchEvents = async ({ queryKey }: any) => {
     }
   }
   
-  // CHECK FOR FILTER CLEARING FLAG
-  // If we detect this is a request after filter clearing, use only minimal parameters
+  // Check if filter clearing is in progress
   const isFilterClearingRequest = sessionStorage.getItem('filter_clearing_in_progress') === 'true';
   
   if (isFilterClearingRequest) {
     console.log('API REQUEST: FILTER CLEARING DETECTED - USANDO APENAS PAGINAÇÃO E ORDENAÇÃO');
     
-    // When clearing filters, don't add any filter parameters at all
-    // Use ONLY pagination and sorting
-    
-    // Get final parameters for API call
+    // Only use pagination and sorting parameters for filter clearing
     const paramString = params.toString();
     console.log('MINIMAL API request params:', paramString);
     
-    // Clear the filter clearing flag before making the request
+    // Clear the filter clearing flag
     sessionStorage.removeItem('filter_clearing_in_progress');
     
     try {
-      // Make the API request with minimal parameters
-      const response = await fetch(`/api/events?${paramString}`);
+      const requestTimeout = isLargeRequest ? 60000 : 30000;
+      
+      // Make the request with appropriate timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), requestTimeout);
+      
+      const response = await fetch(`/api/events?${paramString}`, {
+        signal: controller.signal,
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
+      
+      clearTimeout(timeoutId);
+      
       if (!response.ok) {
         const errorText = await response.text();
         console.error('API error:', { status: response.status, text: errorText });
@@ -69,33 +91,46 @@ const fetchEvents = async ({ queryKey }: any) => {
     }
   }
   
-  // NORMAL REQUEST FLOW (NOT FILTER CLEARING)
-  // Verificar se há parâmetros de filtro na URL
+  // Check for filter parameters
   const hasFilters = searchParams.has('from') || 
-                     searchParams.has('to') ||
-                     searchParams.has('advanced_filters') ||
-                     searchParams.has('filter_condition') ||
-                     searchParams.has('profession_id') ||
-                     searchParams.has('funnel_id') ||
-                     searchParams.has('time_from') ||
-                     searchParams.has('time_to') ||
-                     searchParams.has('filters');
+                   searchParams.has('to') ||
+                   searchParams.has('advanced_filters') ||
+                   searchParams.has('filter_condition') ||
+                   searchParams.has('profession_id') ||
+                   searchParams.has('funnel_id') ||
+                   searchParams.has('time_from') ||
+                   searchParams.has('time_to') ||
+                   searchParams.has('filters');
   
-  // Se não houver nenhum filtro, não inclua nenhum parâmetro de filtro na chamada da API
+  // If no filters, use minimal request
   if (!hasFilters) {
     console.log('No filters detected in URL - sending minimal API request');
     
-    // Final parameters: only pagination and sorting
     const paramString = params.toString();
     console.log('Final API request params (no filters):', paramString);
     
     try {
-      const response = await fetch(`/api/events?${paramString}`);
+      const requestTimeout = isLargeRequest ? 60000 : 30000;
+      
+      // Make the request with appropriate timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), requestTimeout);
+      
+      const response = await fetch(`/api/events?${paramString}`, {
+        signal: controller.signal,
+        headers: {
+          'Cache-Control': 'no-cache'
+        }
+      });
+      
+      clearTimeout(timeoutId);
+      
       if (!response.ok) {
         const errorText = await response.text();
         console.error('API error:', { status: response.status, text: errorText });
         throw new Error(`Falha ao buscar eventos: ${response.status} ${errorText.substring(0, 100)}`);
       }
+      
       const data = await response.json();
       return data;
     } catch (error) {
@@ -104,70 +139,82 @@ const fetchEvents = async ({ queryKey }: any) => {
     }
   }
   
-  // Se houver filtros, copie-os da URL para a requisição API
-  // Copy parameters from current URL, with special handling for filter parameters
-  const paramsEntries = Array.from(searchParams.entries());
-  
-  // Add all parameters from URL, with special handling for filters
-  for (const [key, value] of paramsEntries) {
-    if (key !== 'page' && key !== 'limit' && key !== 'sortBy' && key !== 'sortDirection') {
-      // Check if this is a filter parameter that should be included
-      const isFilterParam = ['advanced_filters', 'filter_condition', 'profession_id', 'funnel_id', 'time_from', 'time_to', 'filters', 'from', 'to'].includes(key);
-      
-      // Handle advanced filters and other filter parameters carefully
-      if (isFilterParam) {
-        if (key === 'advanced_filters' || key === 'filters') {
-          // Ensure we're passing a valid JSON string
-          try {
-            // Validate JSON format
-            const parsed = JSON.parse(value);
-            
-            // Verify this is an array with actual values
-            if (Array.isArray(parsed) && parsed.length > 0 && parsed.some((f: any) => f.value && f.value.trim() !== '')) {
-              // Set the appropriate parameter
-              params.set(key, JSON.stringify(parsed));
-              console.log(`Valid ${key} included in API request`);
-              
-              // Add filter condition if it exists
-              const filterCondition = searchParams.get('filter_condition');
-              if (filterCondition && key === 'advanced_filters') {
-                params.set('filter_condition', filterCondition);
-              }
-            } else {
-              console.log(`Empty or invalid ${key} array - skipping`);
-            }
-          } catch (e) {
-            console.error(`Error parsing ${key}:`, e);
-            // Don't include invalid filter values
-          }
-        } else {
-          // For other filter parameters (like profession_id), include only if they have a value
-          if (value && value.trim() !== '') {
-            params.set(key, value);
-          }
-        }
-      } else {
-        // Non-filter parameters are included as-is
-        params.set(key, value);
-      }
+  // Copy filter parameters from URL
+  const filterParams = ['from', 'to', 'profession_id', 'funnel_id', 'time_from', 'time_to'];
+  for (const param of filterParams) {
+    const value = searchParams.get(param);
+    if (value && value.trim() !== '') {
+      params.set(param, value);
     }
   }
   
-  // Get final parameters for API call
+  // Handle advanced filters parameter
+  const advancedFilters = searchParams.get('advanced_filters');
+  if (advancedFilters) {
+    try {
+      const parsedFilters = JSON.parse(advancedFilters);
+      if (Array.isArray(parsedFilters) && parsedFilters.length > 0) {
+        console.log('Valid advanced_filters included in API request');
+        params.set('advanced_filters', advancedFilters);
+        
+        // Also include filter condition if present
+        const filterCondition = searchParams.get('filter_condition');
+        if (filterCondition) {
+          params.set('filter_condition', filterCondition);
+        }
+      }
+    } catch (e) {
+      console.error('Error parsing advanced_filters:', e);
+    }
+  }
+  
+  // Handle legacy filters parameter
+  const filtersParam = searchParams.get('filters');
+  if (filtersParam && !advancedFilters) {
+    try {
+      const parsedFilters = JSON.parse(filtersParam);
+      if (Array.isArray(parsedFilters) && parsedFilters.length > 0) {
+        console.log('Legacy filters included in API request');
+        params.set('filters', filtersParam);
+      }
+    } catch (e) {
+      console.error('Error parsing legacy filters:', e);
+    }
+  }
+  
+  // Final API request parameters
   const paramString = params.toString();
   console.log('Final API request params:', paramString);
   
   try {
-    // Make the API request
-    const response = await fetch(`/api/events?${paramString}`);
+    // Use longer timeout for large requests
+    const requestTimeout = isLargeRequest ? 60000 : 30000;
+    
+    // Set up request with timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), requestTimeout);
+    
+    const response = await fetch(`/api/events?${paramString}`, {
+      signal: controller.signal,
+      headers: {
+        'Cache-Control': 'no-cache'
+      }
+    });
+    
+    clearTimeout(timeoutId);
+    
     if (!response.ok) {
       const errorText = await response.text();
       console.error('API error:', { status: response.status, text: errorText });
       throw new Error(`Falha ao buscar eventos: ${response.status} ${errorText.substring(0, 100)}`);
     }
+    
     const data = await response.json();
     return data;
-  } catch (error) {
+  } catch (error: any) {
+    if (error.name === 'AbortError') {
+      throw new Error('A solicitação excedeu o tempo limite. Tente reduzir o número de linhas ou refinar seus filtros.');
+    }
     console.error('Fetch error:', error);
     throw error;
   }
@@ -216,6 +263,9 @@ function EventsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname();
+  
+  // Get the queryClient from context
+  const queryClient = useQueryClient();
   
   // State management
   const [isMounted, setIsMounted] = useState(false);
@@ -297,8 +347,11 @@ function EventsContent() {
     refetchOnMount: false,
     retry: 1,
     retryDelay: 500,
+    enabled: hasCalculatedLimit, // Only enable query when limit has been calculated
     placeholderData: (previousData) => previousData,
   });
+
+  console.log(eventsData)
   
   // Safer refetch function that prevents duplicates and manages loading state
   const safeRefetch = useCallback(() => {
@@ -322,6 +375,32 @@ function EventsContent() {
     }, 50);
   }, [refetch, startLoading, stopLoading]);
 
+  // Force a complete refetch with updated queryKey (useful when limit changes)
+  const forceRefetchWithUpdatedKey = useCallback(() => {
+    if (isRefetchingRef.current) {
+      console.log('Skipping duplicate refetch request');
+      return;
+    }
+    
+    isRefetchingRef.current = true;
+    startLoading();
+    
+    // Small delay to ensure state is updated before refetch
+    setTimeout(() => {
+      // Force React Query to use the updated queryKey by invalidating the current query
+      queryClient.invalidateQueries({ 
+        queryKey: ["events"] 
+      }).then(() => {
+        return refetch();
+      })
+      .catch((err: Error) => console.error('Error during forced refetch:', err))
+      .finally(() => {
+        stopLoading();
+        isRefetchingRef.current = false;
+      });
+    }, 100);
+  }, [refetch, startLoading, stopLoading, queryClient]);
+
   // Trigger safeRefetch when refetch-events is dispatched
   useEffect(() => {
     const refetchHandler = () => {
@@ -329,9 +408,19 @@ function EventsContent() {
       safeRefetch();
     };
     
+    const forceRefetchHandler = () => {
+      if (blockRefetchRef.current) return;
+      forceRefetchWithUpdatedKey();
+    };
+    
     window.addEventListener('refetch-events', refetchHandler);
-    return () => window.removeEventListener('refetch-events', refetchHandler);
-  }, [safeRefetch]);
+    window.addEventListener('force-refetch-events', forceRefetchHandler);
+    
+    return () => {
+      window.removeEventListener('refetch-events', refetchHandler);
+      window.removeEventListener('force-refetch-events', forceRefetchHandler);
+    };
+  }, [safeRefetch, forceRefetchWithUpdatedKey]);
 
   // Handle advanced filters change
   useEffect(() => {
@@ -360,10 +449,9 @@ function EventsContent() {
         console.log('Advanced filters present:', currentAdvancedFilters.substring(0, 50) + '...');
       }
       
-      // Check if advanced filters disappeared
+      // Check if advanced filters disappeared but were present before
       if (previousAdvancedFilters && !currentAdvancedFilters) {
         // Check if this is an intentional clearing operation
-        // Quando limpamos os filtros, a URL terá apenas page, limit, sortBy e sortDirection (sem from/to)
         const isIntentionalClearing = 
           (Array.from(currentParams.keys()).length <= 4) || // URL limpa com apenas parâmetros básicos
           sessionStorage.getItem('filter_clearing_in_progress') === 'true' || // Flag de limpeza ativa
@@ -371,34 +459,59 @@ function EventsContent() {
         
         if (!isIntentionalClearing) {
           console.log('Advanced filters were lost, restoring them');
-          currentParams.set('advanced_filters', previousAdvancedFilters);
+          
+          // Create a new URLSearchParams to avoid reference issues
+          const updatedParams = new URLSearchParams(currentParams.toString());
+          updatedParams.set('advanced_filters', previousAdvancedFilters);
           
           // Also restore filter condition if it was lost
           const prevFilterCondition = lastParams.get('filter_condition');
           if (prevFilterCondition) {
-            currentParams.set('filter_condition', prevFilterCondition);
+            updatedParams.set('filter_condition', prevFilterCondition);
           }
           
-          // Update URL without triggering navigation events
+          // Block refetch temporarily while we update the URL
           blockRefetchRef.current = true;
-          router.replace(`/events?${currentParams.toString()}`, { scroll: false });
+          
+          // Update URL with replace to avoid navigation stack issues
+          router.replace(`${pathname}?${updatedParams.toString()}`, { scroll: false });
+          
+          // Parse and set advanced filters from the previous value to ensure state consistency
+          try {
+            const parsedFilters = JSON.parse(previousAdvancedFilters);
+            if (Array.isArray(parsedFilters)) {
+              setAdvancedFilters(parsedFilters);
+            }
+          } catch (e) {
+            console.error('Error parsing restored filters:', e);
+          }
           
           // Allow refetches after a short delay
           setTimeout(() => {
             blockRefetchRef.current = false;
-          }, 100);
+            // Force a refetch with the restored filters
+            window.dispatchEvent(new CustomEvent('refetch-events'));
+          }, 150);
         } else {
           console.log('Detected intentional filter clearing - not restoring filters');
+          // Reset advanced filters state when intentionally cleared
+          setAdvancedFilters([]);
+        }
+      } else if (currentAdvancedFilters) {
+        // If we have filters in the URL, ensure our state matches
+        try {
+          const parsedFilters = JSON.parse(currentAdvancedFilters);
+          if (Array.isArray(parsedFilters)) {
+            setAdvancedFilters(parsedFilters);
+          }
+        } catch (e) {
+          console.error('Error parsing current filters:', e);
         }
       }
       
       // Update the reference to current search params
       lastSearchParamsRef.current = searchParams.toString();
       setHasSearchParamsChanged(true);
-      
-      // Parse search params into filters
-      const parsedFilters = parseSearchParams(currentParams);
-      setAdvancedFilters(parsedFilters || []);
     }
     
     return () => {
@@ -406,7 +519,7 @@ function EventsContent() {
         clearTimeout(loadingTimeoutRef.current);
       }
     };
-  }, [searchParams, router]);
+  }, [searchParams, router, pathname]);
 
   // Refetch when search params change
   useEffect(() => {
@@ -423,6 +536,20 @@ function EventsContent() {
       if (!currentParams.has('advanced_filters') && isFilterClearing) {
         console.log('Resetando estado advancedFilters porque os filtros foram limpos');
         setAdvancedFilters([]);
+      } else if (currentParams.has('advanced_filters')) {
+        // Ensure advanced filters are applied if they exist in the URL
+        try {
+          const advancedFiltersParam = currentParams.get('advanced_filters');
+          if (advancedFiltersParam) {
+            const parsedFilters = JSON.parse(advancedFiltersParam);
+            if (Array.isArray(parsedFilters)) {
+              console.log('Applying advanced filters from URL parameter');
+              setAdvancedFilters(parsedFilters);
+            }
+          }
+        } catch (e) {
+          console.error('Error parsing advanced filters during refetch:', e);
+        }
       }
       
       setHasSearchParamsChanged(false);
@@ -639,26 +766,42 @@ function EventsContent() {
       return;
     }
     
+    // Start loading state
     startLoading();
-    setLimit(newLimit);
-    setCurrentPage(1); // Reset para primeira página
     
-    // Atualizar URL
+    // Check if this is a large export request
+    const isLargeExport = newLimit >= 1000;
+    if (isLargeExport) {
+      console.log(`Large data export requested (${newLimit} rows)`);
+    }
+    
+    // Block automatic refetch during URL update
+    blockRefetchRef.current = true;
+    
+    // Update URL parameters first
     const params = new URLSearchParams(searchParams.toString());
     params.set('limit', String(newLimit));
     params.set('page', '1');
     
-    // Block refetch until we're ready
-    blockRefetchRef.current = true;
+    // Update URL with push to add to history
+    router.push(`${pathname}?${params.toString()}`, { scroll: false });
     
-    router.push(`/events?${params.toString()}`, { scroll: false });
-    
-    // Allow refetch after URL update
+    // Update state after URL update
     setTimeout(() => {
-      blockRefetchRef.current = false;
-      window.dispatchEvent(new CustomEvent('refetch-events'));
-    }, 100);
-  }, [router, searchParams, isManualLoading, startLoading]);
+      setLimit(newLimit);
+      setCurrentPage(1); // Reset to first page
+      
+      // Use longer timeout for large exports
+      const timeoutDelay = isLargeExport ? 300 : 100;
+      
+      // Allow refetch after URL update with appropriate delay
+      setTimeout(() => {
+        blockRefetchRef.current = false;
+        // Use force-refetch event to trigger data fetch with updated query key
+        window.dispatchEvent(new CustomEvent('force-refetch-events'));
+      }, timeoutDelay);
+    }, 50);
+  }, [router, pathname, searchParams, isManualLoading, startLoading]);
 
   const handleSort = useCallback((columnId: string, direction: 'asc' | 'desc' | null) => {
     setSortConfig({ column: columnId, direction });
@@ -777,6 +920,9 @@ function EventsContent() {
           }
         }
         
+        // Reset local filter state immediately
+        setAdvancedFilters([]);
+        
         // Pausar para garantir que o sessionStorage foi limpo
         await new Promise(resolve => setTimeout(resolve, 50));
         
@@ -795,16 +941,16 @@ function EventsContent() {
         if (limit) cleanParams.set('limit', limit);
         
         // Construir URL limpa
-        const cleanUrl = `/events?${cleanParams.toString()}`;
+        const cleanUrl = `${pathname}?${cleanParams.toString()}`;
+        
+        // Update last params ref to prevent auto-restoration
+        lastSearchParamsRef.current = cleanParams.toString();
         
         // Atualizar URL sem navegação
         window.history.replaceState({}, '', cleanUrl);
         
         // Em seguida, atualizar via router para garantir que todos os componentes atualizem
         await router.replace(cleanUrl, { scroll: false });
-        
-        // Resetar estado de filtros para array vazio
-        setAdvancedFilters([]);
         
         // Pausar novamente para garantir que a URL foi atualizada
         await new Promise(resolve => setTimeout(resolve, 50));
@@ -827,12 +973,16 @@ function EventsContent() {
         stopLoading();
       } finally {
         // Garantir que a flag é removida em qualquer caso
-        sessionStorage.removeItem('filter_clearing_in_progress');
+        setTimeout(() => {
+          sessionStorage.removeItem('filter_clearing_in_progress');
+        }, 100);
         
         // Manter a flag advanced_filters_removed por um tempo para evitar restauração imediata
         setTimeout(() => {
           sessionStorage.removeItem('advanced_filters_removed');
         }, 5000); // Manter a flag por 5 segundos após a limpeza
+        
+        stopLoading(1000); // Ensure loading state ends with delay for better UX
       }
     };
     
@@ -843,7 +993,7 @@ function EventsContent() {
     return () => {
       window.removeEventListener('filters-cleared', handleFilterCleared);
     };
-  }, [router, startLoading, stopLoading, refetch]);
+  }, [router, pathname, searchParams, startLoading, stopLoading, refetch]);
 
   // Effect to fetch events when search parameters change
   useEffect(() => {

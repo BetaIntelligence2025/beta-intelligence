@@ -2,6 +2,7 @@ import { Event } from "../types/events-type"
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { capitalize, formatName, formatPhoneNumber } from "@/lib/utils"
+import * as React from 'react'
 
 export interface Column {
   header: string
@@ -14,6 +15,59 @@ export const columns: Column[] = [
   {
     header: "Evento",
     accessorKey: "event_type",
+    cell: ({ row }) => {
+      const eventType = row.getValue("event_type");
+      const eventProps = row.getValue("event_propeties");
+      
+      // Check for PURCHASE events (case insensitive)
+      if (eventType && typeof eventType === 'string' && 
+          eventType.toUpperCase() === "PURCHASE" && 
+          eventProps && typeof eventProps === 'object') {
+        
+        // Safely access product_type
+        const productType = eventProps.product_type;
+        
+        if (productType) {
+          // Choose styling based on product type
+          let bgColor = '';
+          let textColor = '';
+          
+          switch(productType) {
+            case 'main':
+              bgColor = 'bg-green-200';
+              textColor = 'text-green-800';
+              break;
+            case 'upsell':
+              bgColor = 'bg-blue-200';
+              textColor = 'text-blue-800';
+              break;
+            case 'downsell':
+              bgColor = 'bg-amber-200';
+              textColor = 'text-amber-800';
+              break;
+            default:
+              bgColor = 'bg-gray-200';
+              textColor = 'text-gray-800';
+          }
+          
+          // Use standard React component approach with createElement
+          const containerProps = { className: 'flex items-center gap-2' };
+          const labelProps = { 
+            className: `inline-flex items-center justify-center px-2 py-0.5 text-xs font-semibold rounded-full ${bgColor} ${textColor} whitespace-nowrap shadow-sm`
+          };
+          
+          return React.createElement(
+            'div',
+            containerProps,
+            React.createElement('span', {}, eventType),
+            React.createElement('span', labelProps, productType)
+          );
+        }
+      }
+      
+      // Default return just the event type
+      return eventType || "-";
+    }
   },
   {
     header: "Data",

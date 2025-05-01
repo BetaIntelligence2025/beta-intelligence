@@ -227,12 +227,14 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
     // Check if there are any URL parameters that indicate existing filters
     const hasExistingFilters = searchParams.toString() !== "";
     
-    // Auto-apply current day filter on first component mount if no date filter is set
-    // BUT only if there are no existing filters of any kind
+    // Determine if we need to apply the current day filter
+    // Check if we have explicit date parameters in URL
     const fromParam = searchParams.get('from');
     const toParam = searchParams.get('to');
+    const needsDefaultDateFilter = !fromParam && !toParam;
     
-    if (!fromParam && !toParam && !hasInitialFilters && !hasExistingFilters) {
+    // Apply current day filter if needed (no existing date filters)
+    if (needsDefaultDateFilter) {
       console.log("Auto-applying current day filter on component mount");
       
       // Get today's date in Brazilian timezone
@@ -268,8 +270,13 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
         params.set('page', '1');
       }
       
+      // Store in session storage to persist across page refreshes
+      sessionStorage.setItem('events_default_filter_applied', 'true');
+      sessionStorage.setItem('events_from_date', startOfDay);
+      sessionStorage.setItem('events_to_date', endOfDay);
+      
       // Update URL without triggering a re-render
-      router.push(`/events?${params.toString()}`, { scroll: false });
+      router.replace(`/events?${params.toString()}`, { scroll: false });
     } else {
       // If date filters exist, use them
       try {

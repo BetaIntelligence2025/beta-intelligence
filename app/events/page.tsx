@@ -654,16 +654,25 @@ function EventsContent() {
     // Marcar como inicializado para evitar múltiplas execuções
     initialUrlSetupRef.current = true;
     
-    // For clean URLs (first entry), just set page=1 without any date filters
+    // For clean URLs (first entry), set current day as default filter
     if (hasNoParams) {
-      console.log("First entry with clean URL - setting just page=1");
+      console.log("First entry with clean URL - setting current day as default");
       
-      // Simplify URL to just page=1
-      router.replace('/events?page=1', { scroll: false });
+      // Set today as the default date filter
+      setCurrentDayFilter();
       
-      // Note: We don't set any date filters here automatically
       // Mark that we've done initial setup
       localStorage.setItem('events_initial_setup_done', 'true');
+      return;
+    }
+    
+    // For URLs with params but missing from/to dates, add today as default
+    const fromParam = searchParams.get('from');
+    const toParam = searchParams.get('to');
+    
+    if (!fromParam || !toParam) {
+      console.log("URL missing date params - setting current day as default");
+      setCurrentDayFilter();
       return;
     }
     
@@ -678,23 +687,23 @@ function EventsContent() {
     }
     
     // Fix incorrect date formats if needed, but only if they already exist in URL
-    const fromParam = searchParams.get('from');
-    const toParam = searchParams.get('to');
+    const fromParamFix = searchParams.get('from');
+    const toParamFix = searchParams.get('to');
     
-    if ((fromParam && !fromParam.includes('-03:00')) || (toParam && !toParam.includes('-03:00'))) {
+    if ((fromParamFix && !fromParamFix.includes('-03:00')) || (toParamFix && !toParamFix.includes('-03:00'))) {
       console.log("Fixing date format in existing parameters");
       
       // Criar novos parâmetros mantendo os existentes
       const params = new URLSearchParams(searchParams.toString());
       
       // Verificar e corrigir formato
-      if (fromParam && !fromParam.includes('-03:00')) {
-        const fromDate = toBrazilianTime(new Date(fromParam));
+      if (fromParamFix && !fromParamFix.includes('-03:00')) {
+        const fromDate = toBrazilianTime(new Date(fromParamFix));
         params.set('from', getBrazilianStartOfDay(fromDate));
       }
       
-      if (toParam && !toParam.includes('-03:00')) {
-        const toDate = toBrazilianTime(new Date(toParam));
+      if (toParamFix && !toParamFix.includes('-03:00')) {
+        const toDate = toBrazilianTime(new Date(toParamFix));
         params.set('to', getBrazilianEndOfDay(toDate));
       }
       

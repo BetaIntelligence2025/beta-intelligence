@@ -609,11 +609,22 @@ export function EventsTable({
       return
     }
     
+    // Deduplica os eventos selecionados
+    const uniqueEvents: Event[] = [];
+    const eventIdMap = new Map<string, boolean>();
+    
+    for (const event of selectedEvents) {
+      if (!eventIdMap.has(event.event_id)) {
+        eventIdMap.set(event.event_id, true);
+        uniqueEvents.push(event);
+      }
+    }
+    
     // Obter cabeçalhos das colunas visíveis
     const headers = columnsData.map(column => column.header)
     
     // Formatar os dados para CSV
-    const rows = selectedEvents.map(event => {
+    const rows = uniqueEvents.map(event => {
       return columnsData.map(column => {
         const key = column.accessorKey
         let value = ''
@@ -632,6 +643,11 @@ export function EventsTable({
           }
           
           value = currentValue !== undefined ? String(currentValue) : '-'
+          
+          // Formatar valores booleanos para "Cliente" (user.isClient)
+          if (key === "user.isClient") {
+            value = currentValue === true ? "Sim" : "Não";
+          }
         } else {
           // Propriedade direta
           const eventKey = key as keyof typeof event
@@ -674,7 +690,7 @@ export function EventsTable({
     
     // Opcional: chamar callback de exportação
     if (onExport) {
-      onExport(selectedEvents)
+      onExport(uniqueEvents)
     }
   }
 
@@ -685,11 +701,22 @@ export function EventsTable({
       return;
     }
     
+    // Deduplica os eventos da página atual
+    const uniqueEvents: Event[] = [];
+    const eventIdMap = new Map<string, boolean>();
+    
+    for (const event of events) {
+      if (!eventIdMap.has(event.event_id)) {
+        eventIdMap.set(event.event_id, true);
+        uniqueEvents.push(event);
+      }
+    }
+    
     // Obter cabeçalhos das colunas visíveis
     const headers = columnsData.map(column => column.header);
     
     // Formatar os dados para CSV
-    const rows = events.map(event => {
+    const rows = uniqueEvents.map(event => {
       return columnsData.map(column => {
         const key = column.accessorKey;
         let value = '';
@@ -708,6 +735,11 @@ export function EventsTable({
           }
           
           value = currentValue !== undefined ? String(currentValue) : '-';
+          
+          // Formatar valores booleanos para "Cliente" (user.isClient)
+          if (key === "user.isClient") {
+            value = currentValue === true ? "Sim" : "Não";
+          }
         } else {
           // Propriedade direta
           const eventKey = key as keyof typeof event;
@@ -817,6 +849,9 @@ export function EventsTable({
           // Atualizar o progresso para mostrar que estamos buscando os dados
           setExportProgress(1); // 1% para mostrar que começamos
           
+          // Map para rastrear IDs de eventos já coletados (para evitar duplicatas)
+          const eventIdMap = new Map<string, boolean>();
+          
           // Buscar todas as páginas
           for (let page = 1; page <= totalPages; page++) {
             const pageParams = new URLSearchParams(baseParams.toString());
@@ -833,8 +868,13 @@ export function EventsTable({
             const pageEvents = pageData.events || [];
             
             
-            // Adicionar os eventos desta página ao total
-            allEvents = [...allEvents, ...pageEvents];
+            // Adicionar os eventos desta página ao total, evitando duplicatas
+            for (const event of pageEvents) {
+              if (!eventIdMap.has(event.event_id)) {
+                eventIdMap.set(event.event_id, true);
+                allEvents.push(event);
+              }
+            }
             
             // Atualizar o progresso (reservamos 50% do progresso para a busca dos dados)
             const fetchProgress = Math.round((page / totalPages) * 50);
@@ -844,6 +884,19 @@ export function EventsTable({
             await new Promise(resolve => setTimeout(resolve, 100));
           }
           
+        } else {
+          // Deduplica os eventos obtidos diretamente
+          const uniqueEvents: Event[] = [];
+          const eventIdMap = new Map<string, boolean>();
+          
+          for (const event of allEvents) {
+            if (!eventIdMap.has(event.event_id)) {
+              eventIdMap.set(event.event_id, true);
+              uniqueEvents.push(event);
+            }
+          }
+          
+          allEvents = uniqueEvents;
         }
       } catch (error) {
         console.error('Erro na exportação direta, tentando paginação:', error);
@@ -857,6 +910,9 @@ export function EventsTable({
         
         // Atualizar o progresso para mostrar que estamos buscando os dados
         setExportProgress(1); // 1% para mostrar que começamos
+        
+        // Map para rastrear IDs de eventos para evitar duplicatas
+        const eventIdMap = new Map<string, boolean>();
         
         // Buscar todas as páginas
         for (let page = 1; page <= totalPages; page++) {
@@ -874,8 +930,13 @@ export function EventsTable({
           const pageEvents = pageData.events || [];
           
           
-          // Adicionar os eventos desta página ao total
-          allEvents = [...allEvents, ...pageEvents];
+          // Adicionar os eventos desta página ao total, evitando duplicatas
+          for (const event of pageEvents) {
+            if (!eventIdMap.has(event.event_id)) {
+              eventIdMap.set(event.event_id, true);
+              allEvents.push(event);
+            }
+          }
           
           // Atualizar o progresso (reservamos 50% do progresso para a busca dos dados)
           const fetchProgress = Math.round((page / totalPages) * 50);
@@ -957,6 +1018,11 @@ export function EventsTable({
               }
               
               value = currentValue !== undefined ? String(currentValue) : '-';
+              
+              // Formatar valores booleanos para "Cliente" (user.isClient)
+              if (key === "user.isClient") {
+                value = currentValue === true ? "Sim" : "Não";
+              }
             } else {
               // Propriedade direta
               const eventKey = key as keyof typeof event;

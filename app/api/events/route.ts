@@ -12,13 +12,27 @@ import {
 // Usar a configuração centralizada de API
 const EVENTS_ENDPOINT = API_ENDPOINTS.EVENTS
 
+// Função para deduplica eventos por event_id
+function deduplicateEvents(events: any[]) {
+  const uniqueEvents = [];
+  const eventIdMap = new Map<string, boolean>();
+  
+  for (const event of events) {
+    if (event.event_id && !eventIdMap.has(event.event_id)) {
+      eventIdMap.set(event.event_id, true);
+      uniqueEvents.push(event);
+    }
+  }
+  
+  return uniqueEvents;
+}
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     
     // Verificar se essa é uma requisição sem filtros (após limpeza)
-    // Contamos apenas os parâmetros básicos: page, limit, sortBy, sortDirection
+    // Contamos apenas os parâmetros básicos: page, sortBy, sortDirection
     const params = new URLSearchParams()
     const hasOnlyBasicParams = 
       !searchParams.has('from') && 
@@ -30,75 +44,66 @@ export async function GET(request: NextRequest) {
       !searchParams.has('time_from') &&
       !searchParams.has('time_to');
     
+    // Verificar se é uma solicitação de exportação
+    const isExport = searchParams.has('export') && searchParams.get('export') === 'true';
+    
     // Se for uma requisição com apenas parâmetros básicos, não aplique nenhum filtro
     if (hasOnlyBasicParams) {
       console.log('API: Requisição sem filtros detectada - não aplicando filtros padrão');
       
       // Transferir apenas parâmetros básicos
       if (searchParams.has('page')) params.append('page', searchParams.get('page')!);
-      if (searchParams.has('limit')) params.append('limit', searchParams.get('limit')!);
       if (searchParams.has('sortBy')) params.append('sortBy', searchParams.get('sortBy')!);
       if (searchParams.has('sortDirection')) params.append('sortDirection', searchParams.get('sortDirection')!);
       
       const paramString = params.toString();
       // Fazer a requisição para o backend com parâmetros mínimos
       const response = await axios.get(`${EVENTS_ENDPOINT}?${paramString}`);
+      
+      // Deduplica os eventos antes de retorná-los
+      if (response.data && response.data.events) {
+        response.data.events = deduplicateEvents(response.data.events);
+      }
+      
       // Retornar os dados recebidos do backend
       return NextResponse.json(response.data);
     }
     
-    // Caso contrário, continue com o processamento normal dos filtros
-    // Verificar especificamente se os filtros avançados existem
-    const advancedFilters = searchParams.get('advanced_filters')
-    const filterCondition = searchParams.get('filter_condition')
+    // Para outros filtros, transferir todos os parâmetros que temos
+    for (const [key, value] of Array.from(searchParams.entries())) {
+      params.append(key, value)
+    }
     
-    // Criar uma nova instância de URLSearchParams para a requisição ao backend
-    
-    // Fazer uma cópia dos parâmetros originais para garantir que não são perdidos
-    const originalParams = Array.from(searchParams.entries());
-    
-    // Verificação para garantir que advanced_filters está presente na cópia
-    if (advancedFilters) {
-      let foundInOriginal = false;
-      for (const [key, value] of originalParams) {
-        if (key === 'advanced_filters') {
-          foundInOriginal = true;
-          break;
-        }
-      }
-      
-      if (!foundInOriginal) {
-        originalParams.push(['advanced_filters', advancedFilters]);
-      }
-      
-      if (filterCondition && !originalParams.some(([key]) => key === 'filter_condition')) {
-        originalParams.push(['filter_condition', filterCondition]);
+    // Verificar e ajustar timezone para datas no formato ISO
+    if (params.has('from')) {
+      const from = params.get('from')!
+      // Se tem from e time_from, adicionar a hora ao timestamp
+      if (params.has('time_from')) {
+        const timeFrom = params.get('time_from')!
+        // Criar nova data com a timezone do Brasil
+        const [year, month, day] = from.substring(0, 10).split('-').map(Number)
+        const [hour, minute] = timeFrom.split(':').map(Number)
+        const fromDate = new Date(Date.UTC(year, month - 1, day, hour, minute))
+        fromDate.toLocaleString('en-US', { timeZone: BRAZIL_TIMEZONE })
+        params.set('from', fromDate.toISOString())
+        // Remover o parâmetro time_from, já que foi incorporado no timestamp
+        params.delete('time_from')
       }
     }
     
-    // Transferir todos os parâmetros da requisição para os parâmetros da chamada ao backend
-    for (const [key, value] of originalParams) {
-      // Para o caso de advanced_filters, garantir que é uma string JSON válida
-      if (key === 'advanced_filters') {
-        try {
-          // Testar se é JSON válido
-          const parsedFilters = JSON.parse(value)
-          params.append(key, value)
-        } catch (err) {
-          console.error('Erro ao processar advanced_filters:', err)
-          // Não adicionar um valor inválido
-        }
-      } else {
-        params.append(key, value)
-      }
-    }
-    
-    // Verificação final para garantir que advanced_filters foi adicionado
-    if (advancedFilters && !params.has('advanced_filters')) {
-      params.set('advanced_filters', advancedFilters);
-      
-      if (filterCondition) {
-        params.set('filter_condition', filterCondition);
+    if (params.has('to')) {
+      const to = params.get('to')!
+      // Se tem to e time_to, adicionar a hora ao timestamp
+      if (params.has('time_to')) {
+        const timeTo = params.get('time_to')!
+        // Criar nova data com a timezone do Brasil
+        const [year, month, day] = to.substring(0, 10).split('-').map(Number)
+        const [hour, minute] = timeTo.split(':').map(Number)
+        const toDate = new Date(Date.UTC(year, month - 1, day, hour, minute))
+        toDate.toLocaleString('en-US', { timeZone: BRAZIL_TIMEZONE })
+        params.set('to', toDate.toISOString())
+        // Remover o parâmetro time_to, já que foi incorporado no timestamp
+        params.delete('time_to')
       }
     }
     
@@ -106,6 +111,16 @@ export async function GET(request: NextRequest) {
     
     // Fazer a requisição para o backend
     const response = await axios.get(`${EVENTS_ENDPOINT}?${paramString}`)
+    
+    // Deduplica os eventos antes de retorná-los
+    if (response.data && response.data.events) {
+      response.data.events = deduplicateEvents(response.data.events);
+      
+      // Atualizar a contagem total para refletir apenas os eventos únicos
+      if (isExport) {
+        response.data.meta.total = response.data.events.length;
+      }
+    }
     
     // Retornar os dados recebidos do backend
     return NextResponse.json(response.data)

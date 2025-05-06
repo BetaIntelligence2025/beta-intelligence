@@ -135,10 +135,10 @@ export function Pagination({
           onValueChange={(value) => {
             if (onPerPageChange && !isLoading) {
               try {
-                const newPerPage = parseInt(value, 10);
+              const newPerPage = parseInt(value, 10);
                 if (newPerPage > 0) {
                   setTimeout(() => {
-                    onPerPageChange(newPerPage);
+              onPerPageChange(newPerPage);
                   }, 50);
                 }
               } catch (error) {

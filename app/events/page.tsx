@@ -14,6 +14,8 @@ import {
   BRAZIL_TIMEZONE 
 } from '@/lib/date-utils';
 
+const FIXED_LIMIT = 20;
+
 const fetchEvents = async ({ queryKey }: any) => {
   const [_, page, limit, sortConfig, searchParamsString] = queryKey;
   const searchParams = new URLSearchParams(searchParamsString);
@@ -93,14 +95,14 @@ const fetchEvents = async ({ queryKey }: any) => {
   
   // Check for filter parameters
   const hasFilters = searchParams.has('from') || 
-                   searchParams.has('to') ||
-                   searchParams.has('advanced_filters') ||
-                   searchParams.has('filter_condition') ||
-                   searchParams.has('profession_id') ||
-                   searchParams.has('funnel_id') ||
-                   searchParams.has('time_from') ||
-                   searchParams.has('time_to') ||
-                   searchParams.has('filters');
+                     searchParams.has('to') ||
+                     searchParams.has('advanced_filters') ||
+                     searchParams.has('filter_condition') ||
+                     searchParams.has('profession_id') ||
+                     searchParams.has('funnel_id') ||
+                     searchParams.has('time_from') ||
+                     searchParams.has('time_to') ||
+                     searchParams.has('filters');
   
   // If no filters, use minimal request
   if (!hasFilters) {
@@ -147,7 +149,7 @@ const fetchEvents = async ({ queryKey }: any) => {
       params.set(param, value);
     }
   }
-  
+      
   // Handle advanced filters parameter
   const advancedFilters = searchParams.get('advanced_filters');
   if (advancedFilters) {
@@ -156,14 +158,14 @@ const fetchEvents = async ({ queryKey }: any) => {
       if (Array.isArray(parsedFilters) && parsedFilters.length > 0) {
         console.log('Valid advanced_filters included in API request');
         params.set('advanced_filters', advancedFilters);
-        
+              
         // Also include filter condition if present
-        const filterCondition = searchParams.get('filter_condition');
+              const filterCondition = searchParams.get('filter_condition');
         if (filterCondition) {
-          params.set('filter_condition', filterCondition);
-        }
-      }
-    } catch (e) {
+                params.set('filter_condition', filterCondition);
+              }
+            }
+          } catch (e) {
       console.error('Error parsing advanced_filters:', e);
     }
   }
@@ -176,7 +178,7 @@ const fetchEvents = async ({ queryKey }: any) => {
       if (Array.isArray(parsedFilters) && parsedFilters.length > 0) {
         console.log('Legacy filters included in API request');
         params.set('filters', filtersParam);
-      }
+        }
     } catch (e) {
       console.error('Error parsing legacy filters:', e);
     }
@@ -286,10 +288,7 @@ function EventsContent() {
   const [currentPage, setCurrentPage] = useState(
     Number(searchParams.get('page')) || 1
   );
-  const [limit, setLimit] = useState(
-    Number(searchParams.get('limit')) || 10
-  );
-  const [hasCalculatedLimit, setHasCalculatedLimit] = useState(false);
+  const [limit] = useState(FIXED_LIMIT);
   const containerRef = useRef<HTMLDivElement>(null);
   const [sortConfig, setSortConfig] = useState<{
     column: string | null;
@@ -347,7 +346,7 @@ function EventsContent() {
     refetchOnMount: false,
     retry: 1,
     retryDelay: 500,
-    enabled: hasCalculatedLimit, // Only enable query when limit has been calculated
+    enabled: true, // Always enable the query, no longer depends on hasCalculatedLimit
     placeholderData: (previousData) => previousData,
   });
 
@@ -557,43 +556,6 @@ function EventsContent() {
     }
   }, [hasSearchParamsChanged, isMounted, safeRefetch, searchParams]);
 
-  // Calcular linhas visíveis uma única vez na montagem
-  useEffect(() => {
-    if (hasCalculatedLimit) return;
-    
-    const calculateVisibleRows = () => {
-      if (!containerRef.current) return;
-      
-      const windowHeight = window.innerHeight;
-      const headerHeight = 70;
-      const filtersHeight = 80;
-      const paginationHeight = 50;
-      const padding = 40;
-      
-      const availableHeight = windowHeight - headerHeight - filtersHeight - paginationHeight - padding;
-      const rowHeight = 46;
-      const headerRowHeight = 48;
-      
-      const visibleRows = Math.max(5, Math.floor((availableHeight - headerRowHeight) / rowHeight));
-      
-      // Só atualiza se o valor calculado for diferente do atual
-      if (visibleRows !== limit) {
-        setLimit(visibleRows);
-        setHasCalculatedLimit(true);
-        
-        // Atualizar URL apenas quando necessário
-        const params = new URLSearchParams(searchParams.toString());
-        params.set('limit', visibleRows.toString());
-        router.push(`/events?${params.toString()}`, { scroll: false });
-      } else {
-        setHasCalculatedLimit(true);
-      }
-    };
-    
-    // Usar setTimeout para garantir que o layout está estável
-    setTimeout(calculateVisibleRows, 100);
-  }, [hasCalculatedLimit, limit, router, searchParams]);
-
   // Sincronizar o estado currentPage com o parâmetro page da URL
   useEffect(() => {
     const pageParam = searchParams.get('page');
@@ -754,6 +716,9 @@ function EventsContent() {
     // Atualizar apenas o parâmetro de página, mantendo os demais
     params.set('page', newPage.toString());
     
+    // Ensure limit is FIXED_LIMIT
+    params.set('limit', FIXED_LIMIT.toString());
+    
     // Block refetch until we're ready
     blockRefetchRef.current = true;
     
@@ -770,7 +735,7 @@ function EventsContent() {
   }, [router, searchParams, currentPage, isManualLoading, startLoading]);
 
   // Update per-page change handler too
-  const handlePerPageChange = useCallback((newLimit: number) => {
+  const handlePerPageChange = useCallback(() => {
     if (isManualLoading || isRefetchingRef.current) {
       return;
     }
@@ -778,18 +743,12 @@ function EventsContent() {
     // Start loading state
     startLoading();
     
-    // Check if this is a large export request
-    const isLargeExport = newLimit >= 1000;
-    if (isLargeExport) {
-      console.log(`Large data export requested (${newLimit} rows)`);
-    }
-    
     // Block automatic refetch during URL update
     blockRefetchRef.current = true;
     
-    // Update URL parameters first
+    // Update URL parameters first - always use fixed limit
     const params = new URLSearchParams(searchParams.toString());
-    params.set('limit', String(newLimit));
+    params.set('limit', String(FIXED_LIMIT));
     params.set('page', '1');
     
     // Update URL with push to add to history
@@ -797,18 +756,14 @@ function EventsContent() {
     
     // Update state after URL update
     setTimeout(() => {
-      setLimit(newLimit);
       setCurrentPage(1); // Reset to first page
-      
-      // Use longer timeout for large exports
-      const timeoutDelay = isLargeExport ? 300 : 100;
-      
-      // Allow refetch after URL update with appropriate delay
+    
+      // Allow refetch after URL update
       setTimeout(() => {
         blockRefetchRef.current = false;
         // Use force-refetch event to trigger data fetch with updated query key
         window.dispatchEvent(new CustomEvent('force-refetch-events'));
-      }, timeoutDelay);
+      }, 100);
     }, 50);
   }, [router, pathname, searchParams, isManualLoading, startLoading]);
 
@@ -924,7 +879,7 @@ function EventsContent() {
         // Limpar todos os itens de filtro do sessionStorage
         for (let i = 0; i < sessionStorage.length; i++) {
           const key = sessionStorage.key(i);
-          if (key && key.includes('events_')) {
+          if (key && (key.includes('events_') || key.includes('filter_'))) {
             sessionStorage.removeItem(key);
           }
         }
@@ -938,16 +893,15 @@ function EventsContent() {
         // Preservar apenas parâmetros essenciais não relacionados a filtros
         const sortBy = searchParams.get('sortBy');
         const sortDirection = searchParams.get('sortDirection');
-        const limit = searchParams.get('limit');
         
-        // Criar URL completamente nova do zero
+        // Criar URL completamente nova do zero com apenas os parâmetros essenciais
         const cleanParams = new URLSearchParams();
         cleanParams.set('page', '1');
+        cleanParams.set('limit', FIXED_LIMIT.toString()); // Use the fixed limit constant
         
         // Adicionar apenas parâmetros preservados se existirem
         if (sortBy) cleanParams.set('sortBy', sortBy);
         if (sortDirection) cleanParams.set('sortDirection', sortDirection);
-        if (limit) cleanParams.set('limit', limit);
         
         // Construir URL limpa
         const cleanUrl = `${pathname}?${cleanParams.toString()}`;
@@ -965,6 +919,7 @@ function EventsContent() {
         await new Promise(resolve => setTimeout(resolve, 50));
         
         // Limpar o cache da query para evitar dados de filtro antigos
+        await queryClient.invalidateQueries({ queryKey: ["events"] });
         await refetch();
         
         // Finalmente, permitir refetch e disparar evento para forçar a atualização da tabela
@@ -1053,6 +1008,45 @@ function EventsContent() {
     };
   }, [searchParams, isMounted]);
 
+  // Add a new effect to ensure URL has the correct limit value when component mounts
+  useEffect(() => {
+    const limitParam = searchParams.get('limit');
+    if (!limitParam || parseInt(limitParam, 10) !== FIXED_LIMIT) {
+      // Update the URL to include the fixed limit
+      const params = new URLSearchParams(searchParams.toString());
+      params.set('limit', FIXED_LIMIT.toString());
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    }
+  }, []);
+
+  // Add new effect to listen for filter updates from EventsTable
+  useEffect(() => {
+    // Handler for the custom filters-updated event
+    const handleFiltersUpdated = (event: CustomEvent) => {
+      if (!event.detail) return;
+      
+      const { advancedFilters, filterCondition } = event.detail;
+      
+      // If advanced filters exist and were updated, update local state
+      if (advancedFilters !== undefined) {
+        console.log('Received updated advanced filters:', 
+          Array.isArray(advancedFilters) ? 
+          `${advancedFilters.length} filters with condition ${filterCondition}` : 
+          'Filters cleared');
+        
+        setAdvancedFilters(advancedFilters || []);
+      }
+    };
+    
+    // Add event listener with type assertion
+    window.addEventListener('filters-updated', handleFiltersUpdated as EventListener);
+    
+    // Clean up
+    return () => {
+      window.removeEventListener('filters-updated', handleFiltersUpdated as EventListener);
+    };
+  }, []);
+
   return (
     <div className="flex flex-col h-full w-full" ref={containerRef}>
       <div className="w-full flex justify-between pb-4">
@@ -1089,7 +1083,7 @@ function EventsContent() {
             limit: limit,
             last_page: 1
           }}
-          isLoading={isLoading || isManualLoading || !hasCalculatedLimit} 
+          isLoading={isLoading || isManualLoading} 
           onSort={handleSort}
           onPerPageChange={handlePerPageChange}
           currentPage={currentPage}

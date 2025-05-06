@@ -32,6 +32,7 @@ import { Pagination } from "@/components/pagination"
 import { Checkbox } from "@/components/ui/checkbox"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useColumnsStore } from "./stores/columns-store"
+import { debounce } from 'lodash'
 
 /**
  * Função utilitária para converter datas para o formato BRT (horário de Brasília)
@@ -63,6 +64,55 @@ function formatDateToBRT(dateStr: string): string {
   
   // Retornar o valor original se não conseguir converter
   return dateStr;
+}
+
+// Helper functions for URL handling
+function areParamsEqual(p1: URLSearchParams, p2: URLSearchParams): boolean {
+  return p1.toString() === p2.toString();
+}
+
+// Helper to safely handle null values from URLSearchParams
+function safeParamValue(value: string | null): string | undefined {
+  return value === null ? undefined : value;
+}
+
+// The fixed limit constant - always use 20 rows
+const FIXED_LIMIT = 20;
+
+function buildUrlParams(
+  filters: {
+    dateFrom?: string | null | undefined;
+    dateTo?: string | null | undefined;
+    timeFrom?: string | null | undefined;
+    timeTo?: string | null | undefined;
+    professionId?: string | null | undefined;
+    funnelId?: string | null | undefined;
+  },
+  page = 1,
+  limit = 20,
+  sort?: { 
+    column?: string | undefined;
+    direction?: 'asc' | 'desc' | undefined 
+  }
+): URLSearchParams {
+  const params = new URLSearchParams();
+  
+  // Add filters
+  if (filters.dateFrom) params.set('from', filters.dateFrom);
+  if (filters.dateTo) params.set('to', filters.dateTo);
+  if (filters.timeFrom) params.set('time_from', filters.timeFrom);
+  if (filters.timeTo) params.set('time_to', filters.timeTo);
+  if (filters.professionId) params.set('profession_id', filters.professionId);
+  if (filters.funnelId) params.set('funnel_id', filters.funnelId);
+  
+  // Add pagination and sorting
+  params.set('page', page.toString());
+  params.set('limit', limit.toString());
+  
+  if (sort?.column) params.set('sortBy', sort.column);
+  if (sort?.direction) params.set('sortDirection', sort.direction);
+  
+  return params;
 }
 
 interface SortableHeaderProps {
@@ -279,39 +329,9 @@ export function EventsTable({
   }, []);
   
   const router = useRouter()
+  const searchParamsObj = useSearchParams()
   const { visibleColumns } = useColumnsStore()
   
-  // Log dos eventos para verificar a estrutura de dados
-  useEffect(() => {
-    if (events && events.length > 0) {
-      console.log('EventsTable received data count:', events.length);
-    }
-  }, [events]);
-  
-  // Memorizar as colunas visíveis para evitar re-renderizações desnecessárias
-  const columnsData = useMemo(() => 
-    visibleColumns
-      .map(id => defaultColumns.find(col => col.accessorKey === id))
-      .filter(Boolean) as Column[], 
-  [visibleColumns])
-  
-  const [exportAllLoading, setExportAllLoading] = useState(false)
-  const [exportProgress, setExportProgress] = useState(0)
-  const tableContainerRef = useRef<HTMLDivElement>(null)
-  const [rowHeight] = useState(46) // altura fixa das linhas
-  const [visibleRows, setVisibleRows] = useState(meta?.limit || 10) // usar o valor do meta como padrão
-  const [shouldUpdateLimit, setShouldUpdateLimit] = useState(false)
-  const [isColumnManagementOpen, setIsColumnManagementOpen] = useState(false)
-  const [selectedRows, setSelectedRows] = useState<Record<string, boolean>>({})
-  const [selectAll, setSelectAll] = useState(false)
-
-  // Atualizar visibleRows quando meta.limit mudar
-  useEffect(() => {
-    if (meta?.limit && meta.limit !== visibleRows) {
-      setVisibleRows(meta.limit);
-    }
-  }, [meta?.limit]);
-
   // Recupera filtros da URL - memoizado para evitar recriações desnecessárias
   const getFiltersFromUrl = useCallback(() => {
     const params = new URLSearchParams(searchParams);
@@ -331,135 +351,243 @@ export function EventsTable({
       funnelId: funnelId || undefined
     }
   }, [searchParams])
+  
+  // Log dos eventos para verificar a estrutura de dados
+  useEffect(() => {
+    if (events && events.length > 0) {
+      console.log('EventsTable received data count:', events.length);
+    }
+  }, [events]);
+  
+  // Memorizar as colunas visíveis para evitar re-renderizações desnecessárias
+  const columnsData = useMemo(() => 
+    visibleColumns
+      .map(id => defaultColumns.find(col => col.accessorKey === id))
+      .filter(Boolean) as Column[], 
+  [visibleColumns])
+  
+  const [exportAllLoading, setExportAllLoading] = useState(false)
+  const [exportProgress, setExportProgress] = useState(0)
+  const tableContainerRef = useRef<HTMLDivElement>(null)
+  const [isColumnManagementOpen, setIsColumnManagementOpen] = useState(false)
+  const [selectedRows, setSelectedRows] = useState<Record<string, boolean>>({})
+  const [selectAll, setSelectAll] = useState(false)
+  const [filterChangeInProgress, setFilterChangeInProgress] = useState(false)
+  
+  // State for filters
+  const [filters, setFilters] = useState(() => getFiltersFromUrl());
+  
+  // Update filters when URL changes
+  useEffect(() => {
+    setFilters(getFiltersFromUrl());
+  }, [searchParams, getFiltersFromUrl]);
+  
+  // Debounced URL update function
+  const debouncedUpdateUrl = useMemo(() => debounce((url: string) => {
+    router.replace(url, { scroll: false });
+  }, 300), [router]);
 
-  const updateUrl = useCallback((params: Record<string, string | null>) => {
-    const newSearchParams = new URLSearchParams(searchParams);
-    
-    Object.entries(params).forEach(([key, value]) => {
-      if (value === null) {
-        newSearchParams.delete(key);
-      } else {
-        newSearchParams.set(key, value);
-      }
-    });
+  // Cleanup function for debounced operations
+  useEffect(() => {
+    return () => {
+      debouncedUpdateUrl.cancel();
+    };
+  }, [debouncedUpdateUrl]);
 
-    router.push(`/events?${newSearchParams.toString()}`, { scroll: false });
-  }, [router, searchParams]);
-
-  const handleFilterChange = useCallback((filters: { 
+  // Apply filters with URL update
+  const handleFilterChange = useCallback((newFilters: { 
     dateFrom?: string | null | undefined;
     dateTo?: string | null | undefined;
     timeFrom?: string | null | undefined;
     timeTo?: string | null | undefined;
     professionId?: string | null | undefined; 
-    funnelId?: string | null | undefined; 
+    funnelId?: string | null | undefined;
+    advancedFilters?: any[] | null | undefined;
+    filterCondition?: 'AND' | 'OR' | null | undefined;
   }) => {
-    const params = new URLSearchParams(searchParams);
+    // If a filter change is already in progress, queue it
+    if (filterChangeInProgress) {
+      console.log('[Filters] Change already in progress, queueing update');
+      setTimeout(() => handleFilterChange(newFilters), 400);
+      return;
+    }
     
-    // Preservar o parâmetro de página atual
-    const currentPage = params.get('page') || '1';
+    setFilterChangeInProgress(true);
+    document.querySelector('.table-loading-overlay')?.classList.remove('hidden');
     
-    // Atualizar parâmetros de data
-    if (filters.dateFrom !== undefined) {
-      if (filters.dateFrom) {
-        params.set('from', filters.dateFrom);
-        sessionStorage.setItem('events_from_date', filters.dateFrom);
+    // Store filter values in session storage if needed
+    if (newFilters.dateFrom !== undefined) {
+      if (newFilters.dateFrom) {
+        sessionStorage.setItem('events_from_date', newFilters.dateFrom);
       } else {
-        params.delete('from');
         sessionStorage.removeItem('events_from_date');
       }
     }
     
-    if (filters.dateTo !== undefined) {
-      if (filters.dateTo) {
-        params.set('to', filters.dateTo);
-        sessionStorage.setItem('events_to_date', filters.dateTo);
+    if (newFilters.dateTo !== undefined) {
+      if (newFilters.dateTo) {
+        sessionStorage.setItem('events_to_date', newFilters.dateTo);
       } else {
-        params.delete('to');
         sessionStorage.removeItem('events_to_date');
       }
     }
     
-    if (filters.timeFrom !== undefined) {
-      if (filters.timeFrom) {
-        params.set('time_from', filters.timeFrom);
-        sessionStorage.setItem('events_time_from', filters.timeFrom);
+    if (newFilters.timeFrom !== undefined) {
+      if (newFilters.timeFrom) {
+        sessionStorage.setItem('events_time_from', newFilters.timeFrom);
       } else {
-        params.delete('time_from');
         sessionStorage.removeItem('events_time_from');
       }
     }
     
-    if (filters.timeTo !== undefined) {
-      if (filters.timeTo) {
-        params.set('time_to', filters.timeTo);
-        sessionStorage.setItem('events_time_to', filters.timeTo);
+    if (newFilters.timeTo !== undefined) {
+      if (newFilters.timeTo) {
+        sessionStorage.setItem('events_time_to', newFilters.timeTo);
       } else {
-        params.delete('time_to');
         sessionStorage.removeItem('events_time_to');
       }
     }
     
-    // Atualizar parâmetro de profissão
-    if (filters.professionId !== undefined) {
-      if (filters.professionId) {
-        params.set('profession_id', filters.professionId);
-      } else {
-        params.delete('profession_id');
-      }
-    }
-    
-    // Atualizar parâmetro de funil
-    if (filters.funnelId !== undefined) {
-      if (filters.funnelId) {
-        params.set('funnel_id', filters.funnelId);
-      } else {
-        params.delete('funnel_id');
-      }
-    }
-    
-    // Garantir que o parâmetro de página seja mantido
-    params.set('page', currentPage);
-    
     // Se temos filtros de data válidos, marcar que o filtro foi aplicado
-    if (params.get('from') && params.get('to')) {
+    if (newFilters.dateFrom && newFilters.dateTo) {
       sessionStorage.setItem('events_default_filter_applied', 'true');
     }
     
-    // Atualizar URL
-    const currentParams = new URLSearchParams(searchParams);
-    const paramsChanged = params.toString() !== currentParams.toString();
+    // Create new filters object merging current with changes
+    const updatedFilters: typeof filters = { ...filters };
     
-    if (paramsChanged) {
-      router.push(`/events?${params.toString()}`, { scroll: false });
+    // Update only the properties that have changed - with type safety
+    if (newFilters.dateFrom !== undefined) updatedFilters.dateFrom = newFilters.dateFrom || undefined;
+    if (newFilters.dateTo !== undefined) updatedFilters.dateTo = newFilters.dateTo || undefined;
+    if (newFilters.timeFrom !== undefined) updatedFilters.timeFrom = newFilters.timeFrom || undefined;
+    if (newFilters.timeTo !== undefined) updatedFilters.timeTo = newFilters.timeTo || undefined;
+    if (newFilters.professionId !== undefined) updatedFilters.professionId = newFilters.professionId || undefined;
+    if (newFilters.funnelId !== undefined) updatedFilters.funnelId = newFilters.funnelId || undefined;
+    
+    // Update local state
+    setFilters(updatedFilters);
+    
+    // Generate URL parameters, reset to page 1, but preserve sort
+    const sortBy = searchParamsObj.get('sortBy');
+    const sortDirection = searchParamsObj.get('sortDirection') as 'asc' | 'desc' | null;
+    
+    const currentParams = new URLSearchParams(searchParams);
+    const newParams = new URLSearchParams();
+    
+    // Always set page to 1 and limit to FIXED_LIMIT when filters change
+    newParams.set('page', '1');
+    newParams.set('limit', FIXED_LIMIT.toString());
+    
+    // Add sorting parameters if present
+    if (sortBy) newParams.set('sortBy', sortBy);
+    if (sortDirection) newParams.set('sortDirection', sortDirection);
+    
+    // Add basic filters if they exist
+    if (updatedFilters.dateFrom) newParams.set('from', updatedFilters.dateFrom);
+    if (updatedFilters.dateTo) newParams.set('to', updatedFilters.dateTo);
+    if (updatedFilters.timeFrom) newParams.set('time_from', updatedFilters.timeFrom);
+    if (updatedFilters.timeTo) newParams.set('time_to', updatedFilters.timeTo);
+    if (updatedFilters.professionId) newParams.set('profession_id', updatedFilters.professionId);
+    if (updatedFilters.funnelId) newParams.set('funnel_id', updatedFilters.funnelId);
+    
+    // Handle advanced filters if provided
+    if (newFilters.advancedFilters !== undefined) {
+      if (newFilters.advancedFilters && newFilters.advancedFilters.length > 0) {
+        const serializedFilters = JSON.stringify(newFilters.advancedFilters);
+        newParams.set('advanced_filters', serializedFilters);
+        
+        // Also set filter condition if provided, default to AND
+        const filterCondition = newFilters.filterCondition || 'AND';
+        newParams.set('filter_condition', filterCondition);
+        
+        // Store in sessionStorage for consistency
+        sessionStorage.setItem('events_advanced_filters', serializedFilters);
+        sessionStorage.setItem('events_filter_condition', filterCondition);
+      } else {
+        // Clear advanced filters from sessionStorage
+        sessionStorage.removeItem('events_advanced_filters');
+        sessionStorage.removeItem('events_filter_condition');
+      }
+    } else {
+      // If not explicitly provided, preserve existing advanced filters
+      const currentAdvancedFilters = currentParams.get('advanced_filters');
+      const currentFilterCondition = currentParams.get('filter_condition');
+      
+      if (currentAdvancedFilters) {
+        newParams.set('advanced_filters', currentAdvancedFilters);
+        if (currentFilterCondition) {
+          newParams.set('filter_condition', currentFilterCondition);
+        } else {
+          newParams.set('filter_condition', 'AND'); // Default to AND if missing
+        }
+      }
     }
-  }, [router, searchParams]);
+    
+    // Only update if params actually changed
+    if (!areParamsEqual(newParams, currentParams)) {
+      // Use replace instead of push as this is logical navigation
+      const updateUrl = async () => {
+        try {
+          await router.replace(`/events?${newParams.toString()}`, { scroll: false });
+          
+          // Dispatch an event to notify page.tsx that filters have changed
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('filters-updated', { 
+              detail: { 
+                filters: { ...updatedFilters },
+                advancedFilters: newFilters.advancedFilters,
+                filterCondition: newFilters.filterCondition
+              } 
+            }));
+          }
+          
+          setTimeout(() => {
+            setFilterChangeInProgress(false);
+          }, 300);
+        } catch (error) {
+          console.error('Error updating URL with new filters:', error);
+          setFilterChangeInProgress(false);
+        }
+      };
+      
+      // Use debounce for URL updates to prevent rapid changes
+      debouncedUpdateUrl(`/events?${newParams.toString()}`);
+      
+      // Still need to set loading state to false after debounce period
+      setTimeout(() => {
+        setFilterChangeInProgress(false);
+        document.querySelector('.table-loading-overlay')?.classList.add('hidden');
+      }, 400); // Slightly longer than debounce time
+    } else {
+      // If no change, just reset loading state
+      setFilterChangeInProgress(false);
+      document.querySelector('.table-loading-overlay')?.classList.add('hidden');
+    }
+  }, [filters, router, searchParams, searchParamsObj, debouncedUpdateUrl]);
 
   const handleSort = useCallback((columnId: string) => {
-    const newParams = new URLSearchParams(searchParams);
+    // Get current filters and pagination
+    const currentFilters = getFiltersFromUrl();
+    const page = searchParamsObj.get('page') || '1';
     
-    // Se clicar na mesma coluna que já está ordenada
-    if (sortColumn === columnId) {
-      // Se estava ascendente, muda para descendente
-      if (sortDirection === 'asc') {
-        newParams.set('sortDirection', 'desc');
-        newParams.set('sortBy', columnId);
-      } 
-      // Se estava descendente, muda para ascendente
-      else if (sortDirection === 'desc') {
-        newParams.set('sortDirection', 'asc');
-        newParams.set('sortBy', columnId);
-      }
-    } 
-    // Se clicar em uma nova coluna, começa com ascendente
-    else {
-      newParams.set('sortDirection', 'asc');
-      newParams.set('sortBy', columnId);
+    // Determine new sort direction
+    let newDirection: 'asc' | 'desc' = 'asc';
+    if (sortColumn === columnId && sortDirection === 'asc') {
+      newDirection = 'desc';
     }
-
-    router.push(`/events?${newParams.toString()}`, { scroll: false });
-    onSort(columnId, newParams.get('sortDirection') as 'asc' | 'desc');
-  }, [router, searchParams, sortColumn, sortDirection, onSort]);
+    
+    // Build params preserving current state
+    const params = buildUrlParams(
+      currentFilters, 
+      parseInt(page, 10), 
+      FIXED_LIMIT, 
+      { column: columnId, direction: newDirection }
+    );
+    
+    // Update URL and notify parent
+    router.replace(`/events?${params.toString()}`, { scroll: false });
+    onSort(columnId, newDirection);
+  }, [router, searchParamsObj, sortColumn, sortDirection, getFiltersFromUrl, onSort]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -484,88 +612,63 @@ export function EventsTable({
         
         // Update the store with the new column order
         useColumnsStore.setState({ visibleColumns: newOrderColumns });
-        
-        // No need to update columnsData as it will be updated via useMemo effect
       }
     }
   }
-
-  // Calcular a quantidade de linhas que cabem na tela
-  useEffect(() => {
-    function calculateVisibleRows() {
-      if (!tableContainerRef.current) return
-      
-      const container = tableContainerRef.current
-      const containerHeight = container.clientHeight
-      const headerHeight = 48 // altura do cabeçalho
-      const paginationHeight = 56 // altura da paginação
-      
-      // Calcula quantas linhas cabem no espaço disponível
-      const availableHeight = containerHeight - headerHeight - paginationHeight
-      const calculatedRows = Math.floor(availableHeight / rowHeight)
-      
-      // No mínimo 5 linhas, ou usa o cálculo
-      const newVisibleRows = Math.max(5, calculatedRows)
-      
-      if (newVisibleRows !== visibleRows) {
-        setVisibleRows(newVisibleRows)
-        setShouldUpdateLimit(true) // Marca que precisamos atualizar o limite
-      }
-    }
-
-    // Calcula inicialmente após o componente montar
-    const timer = setTimeout(calculateVisibleRows, 100)
-    
-    // Recalcula quando a janela for redimensionada
-    window.addEventListener('resize', calculateVisibleRows)
-    
-    return () => {
-      clearTimeout(timer)
-      window.removeEventListener('resize', calculateVisibleRows)
-    }
-  }, [rowHeight])
-
-  // Atualiza o limite apenas quando marcado para atualizar
-  useEffect(() => {
-    if (shouldUpdateLimit) {
-      const params = new URLSearchParams(searchParams);
-      const currentLimit = Number(params.get('limit') || 10);
-      
-      // Só atualiza se o limite calculado for diferente do atual
-      if (visibleRows !== currentLimit) {
-        const updateParams = new URLSearchParams(searchParams);
-        updateParams.set('limit', visibleRows.toString());
-        router.push(`/events?${updateParams.toString()}`, { scroll: false });
-      }
-      
-      setShouldUpdateLimit(false); // Reset a flag
-    }
-  }, [shouldUpdateLimit, visibleRows, router, searchParams]);
 
   const handlePageChange = useCallback((page: number) => {
     // Don't trigger page changes if already loading or same page
     if (isLoading || page === currentPage) return;
     
-    // Explicitly set loading state for UI feedback during navigation
+    // Show loading overlay
     document.querySelector('.table-loading-overlay')?.classList.remove('hidden');
     
-    // Atualizar a URL
-    const params = new URLSearchParams(searchParams);
+    // Build URL with current filters and sorting, just change page
+    const currentFilters = getFiltersFromUrl();
+    const sortBy = searchParamsObj.get('sortBy');
+    const sortDirection = searchParamsObj.get('sortDirection') as 'asc' | 'desc' | null;
     
-    // Keep all existing parameters but update the page
-    params.set('page', page.toString());
+    const params = buildUrlParams(
+      currentFilters, 
+      page, 
+      FIXED_LIMIT, 
+      { 
+        column: safeParamValue(sortBy),
+        direction: sortDirection === null ? undefined : sortDirection
+      }
+    );
     
-    // Remover quaisquer parâmetros incorretos que possam estar causando problemas
-    params.delete('[object Object]');
-    
-    // If no date filter exists, don't add it during page navigation
-    // This preserves the simple URL format if the user hasn't set filters yet
-    
-    router.push(`/events?${params.toString()}`, { scroll: false });
-    
-    // Chamar a função onPageChange do componente pai para sincronizar state
+    // Update URL, calling onPageChange for parent sync
+    router.replace(`/events?${params.toString()}`, { scroll: false });
     onPageChange(page);
-  }, [router, searchParams, onPageChange, isLoading, currentPage]);
+  }, [router, getFiltersFromUrl, searchParamsObj, isLoading, currentPage, onPageChange]);
+
+  const handlePerPageChange = useCallback((newLimit: number) => {
+    // Always use FIXED_LIMIT regardless of what was requested
+    
+    // Build URL with current filters, sorting, and page 1
+    const currentFilters = getFiltersFromUrl();
+    const sortBy = searchParamsObj.get('sortBy');
+    const sortDirection = searchParamsObj.get('sortDirection') as 'asc' | 'desc' | null;
+    
+    // Reset to page 1 when changing limit
+    const params = buildUrlParams(
+      currentFilters, 
+      1, 
+      FIXED_LIMIT, 
+      { 
+        column: safeParamValue(sortBy),
+        direction: sortDirection === null ? undefined : sortDirection
+      }
+    );
+    
+    // Update URL and notify parent if needed
+    router.replace(`/events?${params.toString()}`, { scroll: false });
+    
+    if (onPerPageChange) {
+      onPerPageChange(FIXED_LIMIT);
+    }
+  }, [router, getFiltersFromUrl, searchParamsObj, onPerPageChange]);
 
   // Verificar se todos estão selecionados e atualizar o estado selectAll
   useEffect(() => {
@@ -1096,8 +1199,22 @@ export function EventsTable({
             initialFilters={useMemo(() => ({
               ...getFiltersFromUrl(),
               professionId: meta?.profession_id?.toString(),
-              funnelId: meta?.funnel_id?.toString()
-            }), [getFiltersFromUrl, meta?.profession_id, meta?.funnel_id])}
+              funnelId: meta?.funnel_id?.toString(),
+              // Add support for advanced filters
+              advancedFilters: (() => {
+                try {
+                  const advFiltersParam = new URLSearchParams(searchParams).get('advanced_filters');
+                  return advFiltersParam ? JSON.parse(advFiltersParam) : undefined;
+                } catch (e) {
+                  console.error('Error parsing advanced filters:', e);
+                  return undefined;
+                }
+              })(),
+              filterCondition: (() => {
+                const condition = new URLSearchParams(searchParams).get('filter_condition');
+                return condition === 'AND' || condition === 'OR' ? condition : undefined;
+              })()
+            }), [getFiltersFromUrl, meta?.profession_id, meta?.funnel_id, searchParams])}
           />
           {Object.keys(selectedRows).filter(id => selectedRows[id]).length > 0 && (
             <span className="text-sm text-gray-500 ml-2">
@@ -1162,10 +1279,12 @@ export function EventsTable({
             </Button>
             <ColumnManagementModal
               isOpen={isColumnManagementOpen}
-              onClose={() => setIsColumnManagementOpen(false)}
+              onClose={() => {
+                setIsColumnManagementOpen(false);
+              }}
               visibleColumns={visibleColumns}
               onColumnChange={(newColumns) => {
-                useColumnsStore.setState({ visibleColumns: newColumns })
+                useColumnsStore.setState({ visibleColumns: newColumns });
               }}
             />
           </div>
@@ -1259,9 +1378,10 @@ export function EventsTable({
                       onSelectChange={toggleRowSelection}
                     />
                   ))}
-                  {/* Linhas vazias para preencher o espaço restante */}
-                  {Array.isArray(events) && events.length > 0 && events.length < visibleRows && (
-                    Array.from({ length: visibleRows - events.length }).map((_, index) => (
+                  
+                  {/* Fill empty rows up to the fixed limit */}
+                  {Array.isArray(events) && events.length > 0 && events.length < FIXED_LIMIT && 
+                    [...Array(FIXED_LIMIT - events.length)].map((_, index) => (
                       <tr key={`empty-${index}`} className="h-[46px]">
                         <td className="w-10 px-3 py-3.5 border-b"></td>
                         {columnsData.map((col) => (
@@ -1269,7 +1389,8 @@ export function EventsTable({
                         ))}
                       </tr>
                     ))
-                  )}
+                  }
+                  
                   {(!events || events.length === 0) && !isLoading && (
                     <tr>
                       <td 
@@ -1290,9 +1411,9 @@ export function EventsTable({
           <Pagination
             pageIndex={currentPage} 
             totalCount={meta?.total || 0}
-            perPage={meta?.limit || 10}
+            perPage={FIXED_LIMIT} 
             onPageChange={handlePageChange}
-            onPerPageChange={onPerPageChange}
+            onPerPageChange={handlePerPageChange}
             isLoading={isLoading}
             onRefresh={() => {
               // Show loading state

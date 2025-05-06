@@ -491,9 +491,6 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
     // Skip if we're already updating from URL changes
     if (isUpdatingFromUrl || isUpdatingDirectly || isUpdatingRef.current) return;
     
-    // Quick check to avoid unnecessary updates
-    if (dateRange?.from && !dateRange?.to) return;
-    
     // Set the flag to prevent recursive updates
     isUpdatingRef.current = true;
     
@@ -521,11 +518,6 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
   const updateUrl = () => {
     // Skip if we're already processing URL updates
     if (isUpdatingFromUrl || isUpdatingRef.current) {
-      return;
-    }
-
-    // Avoid updates with incomplete date range
-    if (dateRange?.from && !dateRange?.to) {
       return;
     }
     
@@ -570,15 +562,19 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
       
       params.set('from', formattedFrom);
       
+      // If to date exists, use it, otherwise use from date as to date
       if (dateRange.to) {
         const to = dateRange.to;
         const toYear = to.getFullYear();
         const toMonth = String(to.getMonth() + 1).padStart(2, '0');
         const toDay = String(to.getDate()).padStart(2, '0');
         formattedTo = `${toYear}-${toMonth}-${toDay}T23:59:59-03:00`;
-        
-        params.set('to', formattedTo);
+      } else {
+        // If no end date, use the same date as start but with end of day time
+        formattedTo = formattedFrom.replace('00:00:00', '23:59:59');
       }
+      
+      params.set('to', formattedTo);
       
       if (dateRange.fromTime) {
         params.set('time_from', dateRange.fromTime);
@@ -640,7 +636,7 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
         professionId: professionIds.length > 0 ? professionIds.join(',') : null,
         funnelId: funnelIds.length > 0 ? funnelIds.join(',') : null,
         dateFrom: dateRange?.from ? formattedFrom : null,
-        dateTo: dateRange?.to ? formattedTo : null,
+        dateTo: dateRange?.from ? formattedTo : null, // Always provide a to date if from exists
         timeFrom: dateRange?.fromTime || null,
         timeTo: dateRange?.toTime || null,
         advancedFilters: filtersWithValues.length > 0 ? filtersWithValues : undefined,
@@ -715,30 +711,95 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
       toTime
     });
     
-    // Notificar mudança de filtros
-    if (onFilterChange) {
-      onFilterChange({
-        ...getFiltersFromUrl(),
-        dateFrom: fromDate,
-        dateTo: toDate,
-        timeFrom: fromTime || null,
-        timeTo: toTime || null
-      });
-    }
+    // Definir a flag para evitar que o useEffect atualize a URL
+    setIsUpdatingDirectly(true);
     
-    // Salvar no session storage
-    if (fromDate) {
-      sessionStorage.setItem('events_from_date', fromDate);
-      sessionStorage.setItem('events_default_filter_applied', 'true');
-    }
-    if (toDate) {
-      sessionStorage.setItem('events_to_date', toDate);
-    }
-    if (fromTime) {
-      sessionStorage.setItem('events_time_from', fromTime);
-    }
-    if (toTime) {
-      sessionStorage.setItem('events_time_to', toTime);
+    try {
+      // Chamar updateUrl diretamente em vez de depender do useEffect
+      const params = new URLSearchParams(searchParams.toString());
+      
+      // Preservar o parâmetro de página atual
+      params.set('page', '1'); // Reset to page 1 when applying date filter
+      
+      // Add date parameters
+      if (fromDate) {
+        params.set('from', fromDate);
+        if (toDate) {
+          params.set('to', toDate);
+        } else {
+          params.set('to', fromDate); // If no end date, use same as start date
+        }
+        
+        if (fromTime) {
+          params.set('time_from', fromTime);
+        } else {
+          params.delete('time_from');
+        }
+        
+        if (toTime) {
+          params.set('time_to', toTime);
+        } else {
+          params.delete('time_to');
+        }
+      }
+      
+      // Preserve other parameters
+      const sortBy = searchParams.get('sortBy');
+      const sortDirection = searchParams.get('sortDirection');
+      const limit = searchParams.get('limit');
+      const professionId = searchParams.get('profession_id');
+      const funnelId = searchParams.get('funnel_id');
+      const advancedFiltersParam = searchParams.get('advanced_filters');
+      const filterConditionParam = searchParams.get('filter_condition');
+      
+      if (sortBy) params.set('sortBy', sortBy);
+      if (sortDirection) params.set('sortDirection', sortDirection);
+      if (limit) params.set('limit', limit);
+      if (professionId) params.set('profession_id', professionId);
+      if (funnelId) params.set('funnel_id', funnelId);
+      if (advancedFiltersParam) params.set('advanced_filters', advancedFiltersParam);
+      if (filterConditionParam) params.set('filter_condition', filterConditionParam);
+      
+      // Update URL
+      const newUrl = `/events?${params.toString()}`;
+      router.push(newUrl, { scroll: false });
+      
+      // Salvar no session storage
+      if (fromDate) {
+        sessionStorage.setItem('events_from_date', fromDate);
+        sessionStorage.setItem('events_default_filter_applied', 'true');
+      }
+      if (toDate) {
+        sessionStorage.setItem('events_to_date', toDate);
+      }
+      if (fromTime) {
+        sessionStorage.setItem('events_time_from', fromTime);
+      }
+      if (toTime) {
+        sessionStorage.setItem('events_time_to', toTime);
+      }
+      
+      // Notificar mudança de filtros
+      if (onFilterChange) {
+        onFilterChange({
+          ...getFiltersFromUrl(),
+          dateFrom: fromDate,
+          dateTo: toDate,
+          timeFrom: fromTime || null,
+          timeTo: toTime || null
+        });
+      }
+      
+      // Dispatch refetch event to update data
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('refetch-events'));
+        
+        // Reset updating flag
+        setIsUpdatingDirectly(false);
+      }, 100);
+    } catch (error) {
+      console.error('Error updating date filter:', error);
+      setIsUpdatingDirectly(false);
     }
   };
 
@@ -1369,38 +1430,63 @@ export function EventsFilters({ onFilterChange, initialFilters = {} }: EventsFil
             size="icon"
             className="h-9 w-9"
             onClick={() => {
+              // Reset date range state
               setDateRange(undefined);
-              const params = new URLSearchParams(searchParams.toString());
-              params.delete('from');
-              params.delete('to');
-              params.delete('time_from');
-              params.delete('time_to');
               
-              // Preservar outros parâmetros
-              const currentPage = params.get('page') || '1';
-              const sortBy = params.get('sortBy');
-              const sortDirection = params.get('sortDirection');
-              const limit = params.get('limit');
+              // Set updating flag to prevent recursive updates
+              setIsUpdatingDirectly(true);
               
-              // Garantir que o parâmetro de página seja mantido
-              params.set('page', currentPage);
-              if (sortBy) params.set('sortBy', sortBy);
-              if (sortDirection) params.set('sortDirection', sortDirection);
-              if (limit) params.set('limit', limit);
-              
-              router.push(`/events?${params.toString()}`, { scroll: false });
-              
-              // Disparar refetch
-              if (onFilterChange) {
-                onFilterChange({
-                  ...getFiltersFromUrl(),
-                  dateFrom: null,
-                  dateTo: null,
-                  timeFrom: null,
-                  timeTo: null
-                });
+              try {
+                // Create new URL params without date parameters
+                const params = new URLSearchParams(searchParams.toString());
+                params.delete('from');
+                params.delete('to');
+                params.delete('time_from');
+                params.delete('time_to');
+                
+                // Preserve other important parameters
+                const currentPage = params.get('page') || '1';
+                const sortBy = params.get('sortBy');
+                const sortDirection = params.get('sortDirection');
+                const limit = params.get('limit');
+                
+                // Reset to page 1 when clearing filters
+                params.set('page', '1');
+                
+                // Keep other important parameters
+                if (sortBy) params.set('sortBy', sortBy);
+                if (sortDirection) params.set('sortDirection', sortDirection);
+                if (limit) params.set('limit', limit);
+                
+                // Update URL
+                router.push(`/events?${params.toString()}`, { scroll: false });
+                
+                // Clear date filters from session storage
+                sessionStorage.removeItem('events_from_date');
+                sessionStorage.removeItem('events_to_date');
+                sessionStorage.removeItem('events_time_from');
+                sessionStorage.removeItem('events_time_to');
+                
+                // Notify parent component of filter change
+                if (onFilterChange) {
+                  onFilterChange({
+                    ...getFiltersFromUrl(),
+                    dateFrom: null,
+                    dateTo: null,
+                    timeFrom: null,
+                    timeTo: null
+                  });
+                }
+                
+                // Dispatch refetch event to update data
+                setTimeout(() => {
+                  window.dispatchEvent(new CustomEvent('refetch-events'));
+                  setIsUpdatingDirectly(false);
+                }, 100);
+              } catch (error) {
+                console.error('Error clearing date filter:', error);
+                setIsUpdatingDirectly(false);
               }
-              window.dispatchEvent(new CustomEvent('refetch-events'));
             }}
             title="Limpar filtro de período"
           >

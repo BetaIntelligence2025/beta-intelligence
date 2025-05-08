@@ -1,7 +1,7 @@
 "use client"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { Braces, LayoutDashboard, LogOut, Users } from "lucide-react"
+import { Braces, LayoutDashboard, LogOut, Users, ClipboardList } from "lucide-react"
 import { useEffect, useState } from "react"
 
 import {
@@ -96,6 +96,14 @@ export function SidebarMenuLayout() {
               <Link href="/events">
                 <Braces className="mr-2 h-4 w-4" />
                 Eventos
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild isActive={pathname === "/pesquisas"}>
+              <Link href="/pesquisas">
+                <ClipboardList className="mr-2 h-4 w-4" />
+                Pesquisas
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

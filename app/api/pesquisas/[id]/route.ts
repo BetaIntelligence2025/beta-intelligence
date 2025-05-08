@@ -5,11 +5,11 @@ import { NextRequest, NextResponse } from "next/server";
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
     // Extrair ID da URL com segurança - usando await para acessar params
-    const { id } = await params;
+    const { id } = await context.params;
     
     // Log do ID recebido para debug
     console.log(`ID recebido na rota: "${id}"`);

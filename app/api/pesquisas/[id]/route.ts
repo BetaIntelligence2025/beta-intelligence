@@ -26,12 +26,11 @@ export async function GET(
       }
     });
     
-    // Usar API_URL como fallback se API_BASE_URL não estiver definido
-    // Remover caractere % que pode estar incorreto no .env
-    const apiUrl = process.env.API_URL ? process.env.API_URL.replace(/%$/, '') : 'https://api-bi.cursobeta.com.br';
-    
+    // Definir a URL base correta para API
+    // Em produção: https://api-bi.cursobeta.com.br (sem /api)
+    // Em desenvolvimento: http://localhost:8080
     const apiBaseUrl = process.env.NODE_ENV === 'production'
-      ? apiUrl
+      ? 'https://api-bi.cursobeta.com.br'
       : 'http://localhost:8080';
     
     // Determinar o ID correto a ser usado na API

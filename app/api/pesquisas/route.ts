@@ -101,12 +101,11 @@ export async function GET(request: NextRequest) {
       console.log(`Aplicando filtro funil=${funnelId}`);
     }
     
-    // Obter a base da URL da API usando a mesma lógica de professions
-    // Usar API_URL como fallback se API_BASE_URL não estiver definido
-    const apiUrl = process.env.API_URL ? process.env.API_URL.replace(/%$/, '') : 'https://api-bi.cursobeta.com.br';
-    
+    // Definir a URL base correta para API
+    // Em produção: https://api-bi.cursobeta.com.br/metrics/surveys (sem /api)
+    // Em desenvolvimento: http://localhost:8080/metrics/surveys
     const apiBaseUrl = process.env.NODE_ENV === 'production'
-      ? `${apiUrl}/metrics/surveys`
+      ? 'https://api-bi.cursobeta.com.br/metrics/surveys'
       : 'http://localhost:8080/metrics/surveys';
     
     const apiToken = process.env.API_TOKEN;

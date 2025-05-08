@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 
-// Função auxiliar para processar a requisição com o ID
-async function processSurveyRequest(id: string, request: NextRequest) {
+/**
+ * Handler para requisições GET - detalhes de uma pesquisa
+ */
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
   try {
+    // Extrair ID da URL com segurança - usando await para acessar params
+    const { id } = await params;
+    
     // Log do ID recebido para debug
     console.log(`ID recebido na rota: "${id}"`);
     
@@ -113,13 +121,4 @@ async function processSurveyRequest(id: string, request: NextRequest) {
       { status: 500 }
     );
   }
-}
-
-// Handler principal da rota
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
-  // Acessar o ID de forma segura
-  const id = String(params?.id || '');
-  
-  // Chamar a função de processamento com o ID extraído
-  return processSurveyRequest(id, request);
 } 

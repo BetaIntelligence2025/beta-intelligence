@@ -13,21 +13,34 @@ import { ptBR } from "date-fns/locale"
 
 // Definir os tipos de dados para questões e respostas conforme documentação da API
 interface SurveyResponse {
-  resposta_id?: string // Campo opcional mantido para compatibilidade
-  texto_opcao: string
+  resposta: string
   score_peso: number
   num_respostas: number
-  percentual_participacao: number
+  participacao_percentual: number
   num_vendas: number
   taxa_conversao_percentual: number
-  percentual_vendas: number
+  percentual_do_total_vendas: number
 }
 
 interface SurveyQuestion {
-  pergunta_id: string
-  texto_pergunta: string
-  profissao: string
+  question_id: string
+  question_text: string
   respostas: SurveyResponse[]
+}
+
+interface Survey {
+  pesquisa_id: number
+  nome_pesquisa: string
+  profissao: string
+  funil: string
+  total_leads: number
+  total_respostas: number
+  total_vendas: number
+  taxa_resposta_percentual: number
+  taxa_conversao_percentual: number
+  tempo_medio_resposta: number
+  tempo_medio_resposta_por_usuario: number
+  questoes: SurveyQuestion[]
 }
 
 // Interface para os filtros de data
@@ -75,6 +88,7 @@ export default function SurveyDetailPage() {
     profissao?: string;
     funil?: string;
   }>({});
+  const [surveyData, setSurveyData] = useState<Survey | null>(null)
   
   // Estados para filtros
   const [currentEditingFilter, setCurrentEditingFilter] = useState<FilterType | null>(null)
@@ -345,64 +359,63 @@ export default function SurveyDetailPage() {
         }
         
         const data = await response.json();
-        console.log(`Dados recebidos: ${Array.isArray(data) ? data.length : 0} questões`);
         
+        // API agora retorna um array com um objeto de pesquisa completo
         if (Array.isArray(data) && data.length > 0) {
-          setQuestions(data)
-          setSelectedQuestionId(data[0].pergunta_id)
+          const survey = data[0] as Survey;
+          console.log(`Dados recebidos: pesquisa "${survey.nome_pesquisa}" com ${survey.questoes?.length || 0} questões`);
           
-          // Extrair informações da primeira questão para o título
-          if (data[0]) {
-            // Obter profissão diretamente da resposta
-            const profissao = data[0].profissao;
+          // Salvar o objeto de pesquisa completo
+          setSurveyData(survey);
+          
+          // Extrair as questões da pesquisa
+          if (Array.isArray(survey.questoes) && survey.questoes.length > 0) {
+            setQuestions(survey.questoes);
+            setSelectedQuestionId(survey.questoes[0].question_id);
             
-            // Tentar extrair funil do surveyId se estiver em formato como "advogado_vendas_0001"
-            let funil = '';
-            const idParts = surveyId.split('_');
-            if (idParts.length > 1) {
-              // O segundo elemento geralmente é o funil (advogado_vendas_0001)
-              funil = idParts[1]?.charAt(0).toUpperCase() + idParts[1]?.slice(1);
-            }
-            
-            // Atualizar informações da pesquisa
+            // Atualizar informações da pesquisa a partir do objeto recebido
             setSurveyInfo({
-              profissao,
-              funil
+              profissao: survey.profissao,
+              funil: survey.funil
             });
             
-            // Construir nome da pesquisa com profissão e funil (se disponíveis)
-            let surveyTitle = "Detalhes da Pesquisa";
-            if (profissao) {
-              surveyTitle = `${profissao}`;
-              if (funil) {
-                surveyTitle += ` - ${funil}`;
-              }
-            }
-            
-            setSurveyName(surveyTitle);
+            // Construir nome da pesquisa com dados da resposta
+            setSurveyName(survey.nome_pesquisa || "Detalhes da Pesquisa");
+          } else {
+            setQuestions([]);
+            setError('Nenhuma questão encontrada para esta pesquisa');
           }
         } else {
-          setQuestions([])
-          setError('Nenhuma questão encontrada para esta pesquisa')
+          setQuestions([]);
+          setError('Nenhuma pesquisa encontrada com este ID');
         }
       } catch (err: any) {
-        console.error('Erro ao buscar detalhes da pesquisa:', err)
-        setError(err.message || 'Erro ao carregar os detalhes da pesquisa')
+        console.error('Erro ao buscar detalhes da pesquisa:', err);
+        setError(err.message || 'Erro ao carregar os detalhes da pesquisa');
+        setQuestions([]); // Garantir que questions esteja vazio
       } finally {
-        setLoading(false)
+        setLoading(false);
       }
     }
     
-    fetchSurveyDetails()
-  }, [surveyId, searchParams])
+    fetchSurveyDetails();
+  }, [surveyId, searchParams]);
   
   // Voltar para a lista de pesquisas
   const handleBack = () => {
-    router.back()
+    // Verificar se venda_inicio está presente para preservar ao retornar
+    const vendaInicio = searchParams.get('venda_inicio');
+    
+    if (vendaInicio) {
+      // Construir URL com filtro preservado
+      router.push(`/pesquisas?venda_inicio=${encodeURIComponent(vendaInicio)}`);
+    } else {
+      router.back();
+    }
   }
 
   // Encontrar a questão selecionada
-  const selectedQuestion = questions.find(q => q.pergunta_id === selectedQuestionId)
+  const selectedQuestion = questions.find(q => q.question_id === selectedQuestionId)
 
   return (
     <div className="container py-6 space-y-6">
@@ -630,6 +643,40 @@ export default function SurveyDetailPage() {
         </div>
       ) : (
         <>
+          {/* Resumo da pesquisa */}
+          {surveyData && (
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-6">
+              <div className="bg-white shadow-sm rounded-lg border p-4">
+                <div className="text-sm text-gray-500 mb-1">Total de Leads</div>
+                <div className="text-2xl font-bold">{surveyData.total_leads.toLocaleString()}</div>
+              </div>
+              
+              <div className="bg-white shadow-sm rounded-lg border p-4">
+                <div className="text-sm text-gray-500 mb-1">Total de Respostas</div>
+                <div className="text-2xl font-bold">{surveyData.total_respostas.toLocaleString()}</div>
+                <div className="text-sm text-blue-600 mt-1">
+                  Taxa: {surveyData.taxa_resposta_percentual.toFixed(2)}%
+                </div>
+              </div>
+              
+              <div className="bg-white shadow-sm rounded-lg border p-4">
+                <div className="text-sm text-gray-500 mb-1">Total de Vendas</div>
+                <div className="text-2xl font-bold">{surveyData.total_vendas.toLocaleString()}</div>
+                <div className="text-sm text-green-600 mt-1">
+                  Taxa: {surveyData.taxa_conversao_percentual.toFixed(2)}%
+                </div>
+              </div>
+              
+              <div className="bg-white shadow-sm rounded-lg border p-4">
+                <div className="text-sm text-gray-500 mb-1">Tempo Médio de Resposta</div>
+                <div className="text-2xl font-bold">{surveyData.tempo_medio_resposta.toFixed(1)} min</div>
+                <div className="text-sm text-gray-500 mt-1">
+                  Por usuário: {surveyData.tempo_medio_resposta_por_usuario.toFixed(1)} min
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Navegação das questões - Estilo melhorado */}
           <div className="w-full mb-6">
             <div className="flex justify-between items-center mb-3">
@@ -643,14 +690,14 @@ export default function SurveyDetailPage() {
               <div className="flex flex-wrap gap-2">
                 {questions.map((question) => (
                   <button
-                    key={question.pergunta_id}
-                    onClick={() => setSelectedQuestionId(question.pergunta_id)}
+                    key={question.question_id}
+                    onClick={() => setSelectedQuestionId(question.question_id)}
                     className={`px-3 py-1.5 text-sm rounded-md transition-all duration-200 
-                      ${selectedQuestionId === question.pergunta_id 
+                      ${selectedQuestionId === question.question_id 
                         ? 'bg-blue-500 text-white shadow-sm' 
                         : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-100'}`}
                   >
-                    {question.texto_pergunta}
+                    {question.question_text}
                   </button>
                 ))}
               </div>
@@ -659,16 +706,16 @@ export default function SurveyDetailPage() {
 
           {/* Conteúdo da pergunta selecionada */}
           {questions.map((question) => (
-            question.pergunta_id === selectedQuestionId && (
-              <div key={question.pergunta_id} className="bg-white rounded-lg border shadow-sm">
+            question.question_id === selectedQuestionId && (
+              <div key={question.question_id} className="bg-white rounded-lg border shadow-sm">
                 <div className="p-4 border-b bg-gray-50">
                   <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-2">
                     <h2 className="text-lg font-semibold text-gray-800">
-                      {question.texto_pergunta}
+                      {question.question_text}
                     </h2>
-                    {question.profissao && (
+                    {surveyData && (
                       <div className="text-sm px-3 py-1 bg-blue-50 text-blue-700 rounded-full border border-blue-200 inline-flex items-center">
-                        <span className="font-medium mr-1">Profissão:</span> {question.profissao}
+                        <span className="font-medium mr-1">Profissão:</span> {surveyData.profissao}
                       </div>
                     )}
                   </div>
@@ -689,16 +736,16 @@ export default function SurveyDetailPage() {
                     <tbody className="divide-y">
                       {question.respostas.map((resposta, index) => (
                         <tr 
-                          key={resposta.resposta_id || index} 
+                          key={resposta.resposta || index} 
                           className={`hover:bg-gray-50 ${index === 0 ? 'bg-blue-50 hover:bg-blue-100' : ''}`}
                         >
                           <td className="px-4 py-3 text-center font-medium">{resposta.score_peso}</td>
-                          <td className="px-4 py-3">{resposta.texto_opcao}</td>
+                          <td className="px-4 py-3">{resposta.resposta}</td>
                           <td className="px-4 py-3 text-center">{resposta.num_respostas.toLocaleString()}</td>
-                          <td className="px-4 py-3 text-center">{resposta.percentual_participacao.toFixed(2)}%</td>
+                          <td className="px-4 py-3 text-center">{resposta.participacao_percentual.toFixed(2)}%</td>
                           <td className="px-4 py-3 text-center">{resposta.num_vendas.toLocaleString()}</td>
                           <td className="px-4 py-3 text-center">{resposta.taxa_conversao_percentual.toFixed(2)}%</td>
-                          <td className="px-4 py-3 text-center">{resposta.percentual_vendas.toFixed(2)}%</td>
+                          <td className="px-4 py-3 text-center">{resposta.percentual_do_total_vendas.toFixed(2)}%</td>
                         </tr>
                       ))}
                     </tbody>

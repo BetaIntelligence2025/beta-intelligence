@@ -18,7 +18,7 @@ import {
   useSortable,
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import { ArrowUpDown, ChevronDown, ChevronUp, DownloadIcon, Loader2, RefreshCw, Calendar, X, Check, Filter, ChevronRight } from "lucide-react"
+import { ArrowUpDown, ChevronDown, ChevronUp, DownloadIcon, Loader2, RefreshCw, Calendar as CalendarIcon, X, Check, Filter, ChevronRight } from "lucide-react"
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from "@/components/ui/button"
 import { Pagination } from "@/components/pagination"
@@ -35,18 +35,19 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion"
+import { Calendar } from "@/components/ui/calendar"
 
 /**
  * Interface para o tipo Pesquisa (survey)
  */
 export interface Pesquisa {
   id: string
-  survey_id?: string // ID original da API
-  nome: string // Nome da Pesquisa
+  pesquisa_id?: string // ID original da API (era survey_id)
+  survey_name: string // alt_survey_name (era nome)
   profissao: string // Profissão
-  funil: string // Funil
-  taxa_resposta: number // Taxa de Resposta (%)
-  conversao_vendas: number // Conversão em Vendas (%)
+  funil: string // funnel_name
+  taxa_resposta: number // taxa_resposta_calculada
+  conversao_vendas: number // conversao_vendas_calculada
   created_at: string
 }
 
@@ -220,6 +221,11 @@ export function PesquisasTable({
     vendas?: FilterDateRange;
   }>({});
   
+  // Novo estado para controlar filtro de ciclo de webinar
+  const [webinarCycleActive, setWebinarCycleActive] = useState<boolean>(false);
+  const [webinarCycleDate, setWebinarCycleDate] = useState<Date | undefined>();
+  const [webinarCycleType, setWebinarCycleType] = useState<'captacao' | 'vendas'>('captacao');
+  
   // Estado para filtro aberto atualmente
   const [currentEditingFilter, setCurrentEditingFilter] = useState<FilterType | null>(null);
   
@@ -238,7 +244,37 @@ export function PesquisasTable({
     
     const newActiveFilters: typeof activeFilters = {};
     
-    // Buscar parâmetros para cada tipo de filtro
+    // Detectar se há parâmetros de ciclo de webinar na URL
+    const hasWebinarCycle = 
+      searchParamsObj.has('pesquisa_inicio') && 
+      searchParamsObj.has('pesquisa_fim') && 
+      searchParamsObj.has('venda_inicio') && 
+      searchParamsObj.has('venda_fim');
+      
+    if (hasWebinarCycle) {
+      setWebinarCycleActive(true);
+      // Extrair data do ciclo a partir do parâmetro pesquisa_inicio
+      const pesquisaInicio = searchParamsObj.get('pesquisa_inicio');
+      if (pesquisaInicio) {
+        try {
+          const date = new Date(pesquisaInicio);
+          setWebinarCycleDate(date);
+        } catch (error) {
+          console.error('Erro ao parsear data do ciclo de webinar:', error);
+        }
+      }
+      
+      // Determinar tipo de filtro ativo baseado nos parâmetros
+      if (searchParamsObj.has('captacao_mode')) {
+        setWebinarCycleType('captacao');
+      } else if (searchParamsObj.has('vendas_mode')) {
+        setWebinarCycleType('vendas');
+      }
+      
+      return; // Não processar filtros padrão se o ciclo de webinar estiver ativo
+    }
+    
+    // Buscar parâmetros para cada tipo de filtro (código original)
     ['captacao', 'pesquisa', 'vendas'].forEach((filterType) => {
       const fromKey = `${filterType}_from`;
       const toKey = `${filterType}_to`;
@@ -278,8 +314,8 @@ export function PesquisasTable({
   // Definição das colunas
   const [columns, setColumns] = useState<Column[]>([
     {
-      id: "nome",
-      accessorKey: "nome",
+      id: "survey_name",
+      accessorKey: "survey_name",
       header: "Nome da Pesquisa",
       cell: (value: any) => <div className="font-medium">{value}</div>
     },
@@ -438,9 +474,87 @@ export function PesquisasTable({
     updateUrl(newParams);
   }, [searchParamsObj, updateUrl]);
   
-  // Handler para limpar todos os filtros
+  // Handler for applying webinar cycle filter
+  const handleWebinarCycleChange = useCallback((cycleData: {
+    type: 'captacao' | 'vendas';
+    pesquisa_inicio?: string;
+    pesquisa_fim?: string;
+    venda_inicio?: string;
+    venda_fim?: string;
+  }) => {
+    if (!cycleData.pesquisa_inicio || !cycleData.pesquisa_fim || 
+        !cycleData.venda_inicio || !cycleData.venda_fim) {
+      return;
+    }
+    
+    // Atualizar estados locais
+    setWebinarCycleActive(true);
+    setWebinarCycleType(cycleData.type);
+    try {
+      setWebinarCycleDate(new Date(cycleData.pesquisa_inicio));
+    } catch (error) {
+      console.error('Erro ao atualizar data do ciclo:', error);
+    }
+    
+    // Atualizar URL com novos parâmetros
+    const newParams = new URLSearchParams(searchParamsObj.toString());
+    
+    // Limpar filtros anteriores
+    ['captacao', 'pesquisa', 'vendas'].forEach(type => {
+      newParams.delete(`${type}_from`);
+      newParams.delete(`${type}_to`);
+      newParams.delete(`${type}_time_from`);
+      newParams.delete(`${type}_time_to`);
+    });
+    
+    // Adicionar parâmetros do ciclo
+    newParams.set('pesquisa_inicio', cycleData.pesquisa_inicio);
+    newParams.set('pesquisa_fim', cycleData.pesquisa_fim);
+    newParams.set('venda_inicio', cycleData.venda_inicio);
+    newParams.set('venda_fim', cycleData.venda_fim);
+    
+    // Add filter type indicator
+    newParams.delete('captacao_mode');
+    newParams.delete('vendas_mode');
+    newParams.set(`${cycleData.type}_mode`, 'true');
+    
+    // Resetar para página 1
+    newParams.set('page', '1');
+    
+    // Atualizar URL
+    updateUrl(newParams);
+    
+    // Fechar popover
+    setIsFiltersOpen(false);
+  }, [searchParamsObj, updateUrl]);
+  
+  // Handler for clearing webinar cycle filter
+  const clearWebinarCycleFilter = useCallback(() => {
+    setWebinarCycleActive(false);
+    setWebinarCycleDate(undefined);
+    
+    const newParams = new URLSearchParams(searchParamsObj.toString());
+    
+    // Remove cycle parameters
+    newParams.delete('pesquisa_inicio');
+    newParams.delete('pesquisa_fim');
+    newParams.delete('venda_inicio');
+    newParams.delete('venda_fim');
+    newParams.delete('captacao_mode');
+    newParams.delete('vendas_mode');
+    
+    // Reset page
+    newParams.set('page', '1');
+    
+    // Update URL
+    updateUrl(newParams);
+  }, [searchParamsObj, updateUrl]);
+  
+  // Handler para limpar todos os filtros (atualizado para incluir ciclo de webinar)
   const handleClearFilters = useCallback(() => {
     setActiveFilters({});
+    setWebinarCycleActive(false);
+    setWebinarCycleDate(undefined);
     
     // Set updating flag to prevent recursive updates
     setIsUpdatingDirectly(true);
@@ -487,12 +601,12 @@ export function PesquisasTable({
   // Verificar se há itens selecionados
   const hasSelectedItems = selectedItems.length > 0;
   
-  // Verificar se há filtros ativos
-  const hasActiveFilters = Object.keys(activeFilters).length > 0;
+  // Verificar se há filtros ativos (atualizado para incluir ciclo de webinar)
+  const hasActiveFilters = Object.keys(activeFilters).length > 0 || webinarCycleActive;
   
-  // Obter o total de filtros ativos
+  // Obter o total de filtros ativos (atualizado)
   const getActiveFiltersCount = (): number => {
-    return Object.keys(activeFilters).length;
+    return Object.keys(activeFilters).length + (webinarCycleActive ? 1 : 0);
   };
   
   // Formatação de data para exibição
@@ -542,8 +656,17 @@ export function PesquisasTable({
       return;
     }
     
-    console.log(`Navegando para pesquisa: ${surveyId}`);
-    router.push(`/pesquisas/${surveyId}`);
+    // Construir URL com filtros
+    let url = `/pesquisas/${surveyId}`;
+    
+    // Preservar o parâmetro venda_inicio se estiver ativo
+    const vendaInicio = searchParamsObj.get('venda_inicio');
+    if (vendaInicio) {
+      url += `?venda_inicio=${encodeURIComponent(vendaInicio)}`;
+    }
+    
+    console.log(`Navegando para pesquisa: ${url}`);
+    router.push(url);
   };
   
   // Renderizar uma versão estática da tabela durante a hidratação no servidor
@@ -639,7 +762,7 @@ export function PesquisasTable({
                         <Checkbox
                           checked={false}
                           disabled={true}
-                          aria-label={`Selecionar ${pesquisa.nome}`}
+                          aria-label={`Selecionar ${pesquisa.survey_name}`}
                         />
                       </td>
                       {columns.map((column) => (
@@ -674,8 +797,8 @@ export function PesquisasTable({
   // Versão completa com DnD, renderizada apenas no cliente
   return (
     <div className="space-y-4">
-      {/* Modal de filtro de data */}
-      {currentEditingFilter && (
+      {/* Modal de filtro de data (original) */}
+      {currentEditingFilter && !webinarCycleActive && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center">
           <div className="bg-white rounded-lg p-4 w-[320px] max-w-full">
             <div className="flex justify-between items-center mb-4">
@@ -720,176 +843,121 @@ export function PesquisasTable({
       {/* Área de filtros */}
       <div className="flex flex-wrap gap-3 mb-4 items-center justify-between">
         <div className="flex flex-wrap gap-3 items-center">
-          {/* Filtro principal */}
-          <Popover open={isFiltersOpen} onOpenChange={setIsFiltersOpen}>
+          {/* Filtro de data para terça-feira */}
+          <Popover>
             <PopoverTrigger asChild>
               <Button
-                variant="outline"
+                variant={webinarCycleActive ? "default" : "outline"}
                 size="sm"
                 className="h-9"
               >
-                <Filter className="h-3.5 w-3.5 mr-2" />
-                <span className="text-sm">Filtros {getActiveFiltersCount() > 0 ? `(${getActiveFiltersCount()})` : ''}</span>
-                <ChevronDown className="h-3.5 w-3.5 ml-2" />
+                <CalendarIcon className="h-3.5 w-3.5 mr-2" />
+                <span className="text-sm">Filtro de Data</span>
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="p-0 w-[300px]" align="start" sideOffset={5}>
-              <div className="p-3">
-                <h4 className="font-medium mb-2">Filtros de data</h4>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between p-2 border rounded-md hover:bg-gray-50">
-                    <div className="flex items-center gap-2">
-                      <Checkbox
-                        id="filter-captacao"
-                        checked={!!activeFilters.captacao}
-                        onCheckedChange={(checked) => {
-                          if (checked) {
-                            openDateFilterForType('captacao');
-                          } else {
-                            removeFilter('captacao');
-                          }
-                        }}
-                      />
-                      <label htmlFor="filter-captacao" className="text-sm cursor-pointer flex-1">
-                        Captação
-                      </label>
-                    </div>
-                    {activeFilters.captacao ? (
+            <PopoverContent className="p-3 w-[350px]" align="start" sideOffset={5}>
+              <div className="space-y-3">
+                <h3 className="text-sm font-medium">Selecione uma Terça-feira</h3>
+                {webinarCycleActive ? (
+                  <div className="bg-blue-50 rounded-md border border-blue-100 p-2">
+                    <div className="text-xs text-blue-700 font-medium mb-1">Filtro Ativo:</div>
+                    <div className="flex flex-col gap-1 text-sm">
                       <div className="flex items-center">
-                        <span className="text-xs text-blue-600 mr-1">
-                          {formatDateForDisplay(activeFilters.captacao)}
-                        </span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 w-6 p-0"
-                          onClick={() => openDateFilterForType('captacao')}
-                        >
-                          <ChevronRight className="h-3.5 w-3.5" />
-                        </Button>
+                        <span className="font-medium mr-2">Data:</span>
+                        <span>{webinarCycleDate ? format(webinarCycleDate, "dd/MM/yyyy (EEEE)", { locale: ptBR }) : "Não definida"}</span>
                       </div>
-                    ) : (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 ml-auto"
-                        onClick={() => openDateFilterForType('captacao')}
-                        disabled={!activeFilters.captacao}
-                      >
-                        <span className="text-xs">Selecionar</span>
-                      </Button>
-                    )}
-                  </div>
-                  
-                  <div className="flex items-center justify-between p-2 border rounded-md hover:bg-gray-50">
-                    <div className="flex items-center gap-2">
-                      <Checkbox
-                        id="filter-pesquisa"
-                        checked={!!activeFilters.pesquisa}
-                        onCheckedChange={(checked) => {
-                          if (checked) {
-                            openDateFilterForType('pesquisa');
-                          } else {
-                            removeFilter('pesquisa');
-                          }
-                        }}
-                      />
-                      <label htmlFor="filter-pesquisa" className="text-sm cursor-pointer flex-1">
-                        Pesquisa
-                      </label>
                     </div>
-                    {activeFilters.pesquisa ? (
-                      <div className="flex items-center">
-                        <span className="text-xs text-blue-600 mr-1">
-                          {formatDateForDisplay(activeFilters.pesquisa)}
-                        </span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 w-6 p-0"
-                          onClick={() => openDateFilterForType('pesquisa')}
-                        >
-                          <ChevronRight className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    ) : (
+                    <div className="mt-2 flex justify-end">
                       <Button
-                        variant="ghost"
+                        variant="destructive"
                         size="sm"
-                        className="h-6 ml-auto"
-                        onClick={() => openDateFilterForType('pesquisa')}
-                        disabled={!activeFilters.pesquisa}
+                        onClick={clearWebinarCycleFilter}
                       >
-                        <span className="text-xs">Selecionar</span>
+                        <X className="h-3.5 w-3.5 mr-1" />
+                        Remover Filtro
                       </Button>
-                    )}
-                  </div>
-                  
-                  <div className="flex items-center justify-between p-2 border rounded-md hover:bg-gray-50">
-                    <div className="flex items-center gap-2">
-                      <Checkbox
-                        id="filter-vendas"
-                        checked={!!activeFilters.vendas}
-                        onCheckedChange={(checked) => {
-                          if (checked) {
-                            openDateFilterForType('vendas');
-                          } else {
-                            removeFilter('vendas');
-                          }
-                        }}
-                      />
-                      <label htmlFor="filter-vendas" className="text-sm cursor-pointer flex-1">
-                        Vendas
-                      </label>
                     </div>
-                    {activeFilters.vendas ? (
-                      <div className="flex items-center">
-                        <span className="text-xs text-blue-600 mr-1">
-                          {formatDateForDisplay(activeFilters.vendas)}
-                        </span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 w-6 p-0"
-                          onClick={() => openDateFilterForType('vendas')}
-                        >
-                          <ChevronRight className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    ) : (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 ml-auto"
-                        onClick={() => openDateFilterForType('vendas')}
-                        disabled={!activeFilters.vendas}
-                      >
-                        <span className="text-xs">Selecionar</span>
-                      </Button>
-                    )}
                   </div>
-                </div>
-              </div>
-              <div className="flex items-center justify-between p-3 pt-0 border-t mt-3">
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={() => {
-                    handleClearFilters();
-                    setIsFiltersOpen(false);
-                  }}
-                  className="text-sm"
-                  disabled={!hasActiveFilters}
-                >
-                  Limpar filtros
-                </Button>
-                <Button 
-                  size="sm" 
-                  onClick={() => setIsFiltersOpen(false)}
-                  className="text-sm"
-                >
-                  Fechar
-                </Button>
+                ) : (
+                  <div className="space-y-3">
+                    <Calendar
+                      mode="single"
+                      selected={webinarCycleDate}
+                      onSelect={(date) => {
+                        if (date) {
+                          // Verificar se é terça-feira e ajustar se necessário
+                          let targetDate = new Date(date);
+                          while (targetDate.getDay() !== 2) { // 2 = terça-feira
+                            targetDate.setDate(targetDate.getDate() + 1);
+                          }
+                          
+                          // Criar as datas conforme especificado
+                          // pesquisa_inicio: 7 dias antes com horário 20:00
+                          const pesquisaInicio = new Date(targetDate);
+                          pesquisaInicio.setDate(pesquisaInicio.getDate() - 7);
+                          pesquisaInicio.setHours(20, 0, 0, 0);
+                          
+                          // pesquisa_fim: data selecionada com horário 20:00
+                          const pesquisaFim = new Date(targetDate);
+                          pesquisaFim.setHours(20, 0, 0, 0);
+                          
+                          // vendas_inicio: data selecionada com horário 20:30
+                          const vendasInicio = new Date(targetDate);
+                          vendasInicio.setHours(20, 30, 0, 0);
+                          
+                          // vendas_fim: data selecionada com horário 23:59:59
+                          const vendasFim = new Date(targetDate);
+                          vendasFim.setHours(23, 59, 59, 999);
+                          
+                          // Definir estado e aplicar filtro
+                          setWebinarCycleDate(targetDate);
+                          setWebinarCycleActive(true);
+                          
+                          // Apenas venda_inicio em formato ISO
+                          const vendasInicioISO = vendasInicio.toISOString();
+                          
+                          // Atualizar URL com um único parâmetro
+                          const newParams = new URLSearchParams(searchParamsObj.toString());
+                          
+                          // Limpar TODOS os filtros anteriores
+                          ['captacao', 'pesquisa', 'vendas'].forEach(type => {
+                            newParams.delete(`${type}_from`);
+                            newParams.delete(`${type}_to`);
+                            newParams.delete(`${type}_time_from`);
+                            newParams.delete(`${type}_time_to`);
+                          });
+                          
+                          // Remover todos os parâmetros de ciclo
+                          newParams.delete('pesquisa_inicio');
+                          newParams.delete('pesquisa_fim');
+                          newParams.delete('venda_inicio');
+                          newParams.delete('venda_fim');
+                          newParams.delete('captacao_mode');
+                          newParams.delete('vendas_mode');
+                          
+                          // Adicionar APENAS venda_inicio - nada mais
+                          newParams.set('venda_inicio', vendasInicioISO);
+                          
+                          // Resetar para página 1
+                          newParams.set('page', '1');
+                          
+                          // Atualizar URL
+                          updateUrl(newParams);
+                        }
+                      }}
+                      disabled={(date) => date.getDay() !== 2} // Permitir apenas terças-feiras
+                      locale={ptBR}
+                      initialFocus
+                    />
+                    <div className="text-xs text-muted-foreground mt-1">
+                      Por favor, selecione uma terça-feira. O filtro configurará automaticamente:
+                      <ul className="mt-1 pl-4 list-disc">
+                        <li>Período de pesquisa: 7 dias antes até às 20:00 da data selecionada</li>
+                        <li>Período de vendas: das 20:30 às 23:59 da data selecionada</li>
+                      </ul>
+                    </div>
+                  </div>
+                )}
               </div>
             </PopoverContent>
           </Popover>
@@ -897,12 +965,13 @@ export function PesquisasTable({
           {/* Indicador de filtros ativos */}
           {hasActiveFilters && (
             <div className="flex flex-wrap items-center gap-2">
+              {/* Tags para filtros padrão */}
               {Object.entries(activeFilters).map(([type, dateRange]) => (
                 <div 
                   key={type}
                   className="flex items-center gap-1 px-2 py-1 bg-blue-50 border border-blue-200 rounded-md"
                 >
-                  <Calendar className="h-3.5 w-3.5 text-blue-600" />
+                  <CalendarIcon className="h-3.5 w-3.5 text-blue-600" />
                   <span className="text-xs text-blue-700">
                     {filterTypeNames[type as FilterType]}: {formatDateForDisplay(dateRange)}
                   </span>
@@ -916,6 +985,24 @@ export function PesquisasTable({
                   </Button>
                 </div>
               ))}
+              
+              {/* Tag para ciclo de webinar */}
+              {webinarCycleActive && webinarCycleDate && (
+                <div className="flex items-center gap-1 px-2 py-1 bg-indigo-50 border border-indigo-200 rounded-md">
+                  <CalendarIcon className="h-3.5 w-3.5 text-indigo-600" />
+                  <span className="text-xs text-indigo-700">
+                    Filtro de data: {format(webinarCycleDate, "dd/MM/yy", { locale: ptBR })}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-5 w-5 p-0 text-indigo-700 hover:bg-indigo-100"
+                    onClick={clearWebinarCycleFilter}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              )}
             </div>
           )}
           
@@ -1038,7 +1125,7 @@ export function PesquisasTable({
                     <tr 
                       key={pesquisa.id}
                       className="hover:bg-gray-50 cursor-pointer"
-                      onClick={() => navigateToSurveyDetails(pesquisa.id, pesquisa.survey_id)}
+                      onClick={() => navigateToSurveyDetails(pesquisa.id, pesquisa.pesquisa_id)}
                     >
                       <td 
                         className="w-12 pl-4 pr-0 py-4" 
@@ -1047,7 +1134,7 @@ export function PesquisasTable({
                         <Checkbox
                           checked={selectedItems.includes(pesquisa.id)}
                           onCheckedChange={() => toggleRowSelection(pesquisa.id)}
-                          aria-label={`Selecionar ${pesquisa.nome}`}
+                          aria-label={`Selecionar ${pesquisa.survey_name}`}
                         />
                       </td>
                       {columns.map((column) => (

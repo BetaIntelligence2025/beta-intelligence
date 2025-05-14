@@ -1,7 +1,7 @@
 "use client"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { Braces, LayoutDashboard, LogOut, Users, ClipboardList } from "lucide-react"
+import { Braces, LayoutDashboard, LogOut, Users, ClipboardList, BarChart, FileSpreadsheet } from "lucide-react"
 import { useEffect, useState } from "react"
 
 import {
@@ -84,14 +84,6 @@ export function SidebarMenuLayout() {
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild isActive={pathname === "/usuarios"}>
-              <Link href="/usuarios">
-                <Users className="mr-2 h-4 w-4" />
-                Usuários
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
             <SidebarMenuButton asChild isActive={pathname === "/events"}>
               <Link href="/events">
                 <Braces className="mr-2 h-4 w-4" />
@@ -104,6 +96,19 @@ export function SidebarMenuLayout() {
               <Link href="/pesquisas">
                 <ClipboardList className="mr-2 h-4 w-4" />
                 Pesquisas
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          
+          <div className="pt-4 pb-2 px-2 text-sm text-muted-foreground">
+            Overview por etapa
+          </div>
+          
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild isActive={pathname === "/dashboard/overview"}>
+              <Link href="/dashboard/overview">
+                <FileSpreadsheet className="mr-2 h-4 w-4" />
+                Páginas de Captação
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

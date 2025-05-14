@@ -35,59 +35,77 @@ const fetchPesquisas = async ({ queryKey }: any) => {
     }
   }
   
-  // Verificar todos os tipos de filtros possíveis e mapear para os parâmetros da API
-  const filterTypes = ['captacao', 'pesquisa', 'vendas'];
-  const apiParamMapping: Record<string, string> = {
-    'captacao_from': 'lead_inicio',
-    'captacao_to': 'lead_fim',
-    'pesquisa_from': 'pesquisa_inicio',
-    'pesquisa_to': 'pesquisa_fim',
-    'vendas_from': 'venda_inicio',
-    'vendas_to': 'venda_fim'
-  };
+  // Check for webinar cycle parameters
+  const webinarCycleParams = ['pesquisa_inicio', 'pesquisa_fim', 'venda_inicio', 'venda_fim'];
+  let hasWebinarCycleParams = false;
   
-  console.log('URL params:', Object.fromEntries(searchParams.entries()));
-  
-  // Para cada tipo de filtro, verificar e usar o mapeamento para a API
-  filterTypes.forEach(filterType => {
-    // Parâmetros para este tipo de filtro
-    const fromParam = `${filterType}_from`;
-    const toParam = `${filterType}_to`;
-    
-    // Aplicar mapeamento dos parâmetros para os nomes da API
-    if (searchParams.has(fromParam)) {
-      const value = searchParams.get(fromParam);
+  webinarCycleParams.forEach(param => {
+    if (searchParams.has(param)) {
+      const value = searchParams.get(param);
       if (value && value.trim() !== '') {
-        const apiParam = apiParamMapping[fromParam];
-        params.set(apiParam, value);
-        console.log(`Filtro aplicado: ${apiParam}=${value}`);
-      }
-    }
-    
-    if (searchParams.has(toParam)) {
-      const value = searchParams.get(toParam);
-      if (value && value.trim() !== '') {
-        const apiParam = apiParamMapping[toParam];
-        params.set(apiParam, value);
-        console.log(`Filtro aplicado: ${apiParam}=${value}`);
+        params.set(param, value);
+        console.log(`Filtro de ciclo de webinar aplicado: ${param}=${value}`);
+        hasWebinarCycleParams = true;
       }
     }
   });
   
-  // Verificar e copiar parâmetros legados (manter compatibilidade)
-  if (searchParams.has('from')) {
-    const value = searchParams.get('from') || '';
-    if (value.trim() !== '') {
-      params.set('data_inicio', value);
-      console.log(`Filtro legado aplicado: data_inicio=${value}`);
+  // If webinar cycle params are present, don't process regular filters
+  if (!hasWebinarCycleParams) {
+    // Verificar todos os tipos de filtros possíveis e mapear para os parâmetros da API
+    const filterTypes = ['captacao', 'pesquisa', 'vendas'];
+    const apiParamMapping: Record<string, string> = {
+      'captacao_from': 'lead_inicio',
+      'captacao_to': 'lead_fim',
+      'pesquisa_from': 'pesquisa_inicio',
+      'pesquisa_to': 'pesquisa_fim',
+      'vendas_from': 'venda_inicio',
+      'vendas_to': 'venda_fim'
+    };
+    
+    console.log('URL params:', Object.fromEntries(searchParams.entries()));
+    
+    // Para cada tipo de filtro, verificar e usar o mapeamento para a API
+    filterTypes.forEach(filterType => {
+      // Parâmetros para este tipo de filtro
+      const fromParam = `${filterType}_from`;
+      const toParam = `${filterType}_to`;
+      
+      // Aplicar mapeamento dos parâmetros para os nomes da API
+      if (searchParams.has(fromParam)) {
+        const value = searchParams.get(fromParam);
+        if (value && value.trim() !== '') {
+          const apiParam = apiParamMapping[fromParam];
+          params.set(apiParam, value);
+          console.log(`Filtro aplicado: ${apiParam}=${value}`);
+        }
+      }
+      
+      if (searchParams.has(toParam)) {
+        const value = searchParams.get(toParam);
+        if (value && value.trim() !== '') {
+          const apiParam = apiParamMapping[toParam];
+          params.set(apiParam, value);
+          console.log(`Filtro aplicado: ${apiParam}=${value}`);
+        }
+      }
+    });
+    
+    // Verificar e copiar parâmetros legados (manter compatibilidade)
+    if (searchParams.has('from')) {
+      const value = searchParams.get('from') || '';
+      if (value.trim() !== '') {
+        params.set('data_inicio', value);
+        console.log(`Filtro legado aplicado: data_inicio=${value}`);
+      }
     }
-  }
-  
-  if (searchParams.has('to')) {
-    const value = searchParams.get('to') || '';
-    if (value.trim() !== '') {
-      params.set('data_fim', value);
-      console.log(`Filtro legado aplicado: data_fim=${value}`);
+    
+    if (searchParams.has('to')) {
+      const value = searchParams.get('to') || '';
+      if (value.trim() !== '') {
+        params.set('data_fim', value);
+        console.log(`Filtro legado aplicado: data_fim=${value}`);
+      }
     }
   }
   
@@ -234,7 +252,7 @@ function PesquisasContent() {
         ...selectedPesquisas.map(item => {
           return [
             item.id,
-            `"${item.nome}"`, // Aspas para evitar problemas com vírgulas no texto
+            `"${item.survey_name}"`, // Aspas para evitar problemas com vírgulas no texto
             `"${item.profissao}"`,
             `"${item.funil}"`,
             item.taxa_resposta,

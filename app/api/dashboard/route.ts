@@ -91,8 +91,8 @@ async function fetchPeriodData(
     
     // Tratar o caso especial do endpoint de sessão na porta 8080
     if (endpoint === 'session') {
-      // Construir a URL para a API externa na porta 8080
-      const sessionUrl = `http://localhost:8080/session/?${new URLSearchParams(params)}`;
+      // Construir a URL para a API externa usando API_BASE_URL
+      const sessionUrl = `${API_BASE_URL}/session/?${new URLSearchParams(params)}`;
       
       console.log(`Fetching session data with URL: ${sessionUrl.length > 150 ? 
         sessionUrl.slice(0, 150) + '...' : sessionUrl}`);

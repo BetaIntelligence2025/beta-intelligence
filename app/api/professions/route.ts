@@ -1,12 +1,10 @@
 import { NextResponse } from 'next/server'
-import { API_ENDPOINTS } from '@/app/config/api'
+import { API_BASE_URL } from '@/app/config/api'
 
 export async function GET() {
   try {
-    // Use localhost for development and API_BASE_URL for production
-    const apiUrl = process.env.NODE_ENV === 'production'
-      ? (process.env.API_BASE_URL ? `${process.env.API_BASE_URL}/professions` : 'https://api-bi.cursobeta.com.br/professions')
-      : 'http://localhost:8080/professions';
+    // Use API_BASE_URL from the config file for consistent behavior
+    const apiUrl = `${API_BASE_URL}/professions`;
       
     console.log(`Fetching professions from: ${apiUrl} (${process.env.NODE_ENV} mode)`);
     
@@ -23,7 +21,7 @@ export async function GET() {
     console.error('Error fetching professions:', error);
     return NextResponse.json({ 
       data: [],
-      error: `Failed to connect to ${process.env.NODE_ENV === 'production' ? 'production API' : 'localhost:8080'}`
+      error: `Failed to connect to API: ${error}`
     });
   }
 } 

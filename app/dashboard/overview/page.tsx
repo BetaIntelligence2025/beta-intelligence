@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { addDays, format } from 'date-fns'
 import { DatePickerWithRange } from '@/components/date-range-picker'
 import { DateRange } from 'react-day-picker'
+import { API_BASE_URL } from '@/app/config/api'
 
 interface ProfessionData {
   profession_id: number;
@@ -76,7 +77,7 @@ export default function OverviewPage() {
         params.append('to', format(date.to, 'yyyy-MM-dd'));
       }
       
-      const url = `http://localhost:8080/dashboard/profession-conversion?${params.toString()}`;
+      const url = `${API_BASE_URL}/dashboard/profession-conversion?${params.toString()}`;
       console.log('Chamando API:', url);
       
       const response = await fetch(url);

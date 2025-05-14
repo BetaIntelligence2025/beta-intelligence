@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { API_BASE_URL } from '@/app/config/api';
 
 export async function GET(request: Request) {
   try {
@@ -15,14 +16,12 @@ export async function GET(request: Request) {
       }, { status: 400 });
     }
 
-    // Use localhost for development and API_BASE_URL for production
-    const backendUrl = process.env.NODE_ENV === 'production'
-      ? (process.env.API_BASE_URL || 'https://api-bi.cursobeta.com.br')
-      : 'http://localhost:8080';
+    // Use API_BASE_URL from config
+    const apiUrl = `${API_BASE_URL}/professions/${profession_id}/funnels`;
       
-    console.log(`Fetching funnels from: ${backendUrl}/professions/${profession_id}/funnels (${process.env.NODE_ENV} mode)`);
+    console.log(`Fetching funnels from: ${apiUrl} (${process.env.NODE_ENV} mode)`);
     
-    const response = await fetch(`${backendUrl}/professions/${profession_id}/funnels`, {
+    const response = await fetch(apiUrl, {
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json'

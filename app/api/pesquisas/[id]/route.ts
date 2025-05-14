@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isValidWebinarDate, isValidWebinarTime, validateWebinarCycleConsistency, validateVendasConsistency } from "@/app/lib/webinar-utils";
+import { API_BASE_URL } from '@/app/config/api';
 
 // Função para validar parâmetros do ciclo de webinar
 function validateWebinarCycleParams(
@@ -218,9 +219,7 @@ export async function GET(
     // Definir a URL base correta para API
     // Em produção: https://api-bi.cursobeta.com.br (sem /api)
     // Em desenvolvimento: http://localhost:8080
-    const apiBaseUrl = process.env.NODE_ENV === 'production'
-      ? 'https://api-bi.cursobeta.com.br'
-      : 'http://localhost:8080';
+    const apiBaseUrl = API_BASE_URL;
     
     // Determinar o ID correto a ser usado na API
     // Se o ID é numérico, usamos diretamente

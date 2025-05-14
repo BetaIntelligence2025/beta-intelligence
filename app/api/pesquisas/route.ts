@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { isValidWebinarDate, isValidWebinarTime, validateWebinarCycleConsistency, validateVendasConsistency } from "@/app/lib/webinar-utils";
+import { API_BASE_URL } from '@/app/config/api';
 
 // Modelo básico de pesquisa para o exemplo
 interface Pesquisa {
@@ -294,9 +295,7 @@ export async function GET(request: NextRequest) {
     // Definir a URL base correta para API
     // Em produção: https://api-bi.cursobeta.com.br/metrics/surveys (sem /api)
     // Em desenvolvimento: http://localhost:8080/metrics/surveys
-    const apiBaseUrl = process.env.NODE_ENV === 'production'
-      ? 'https://api-bi.cursobeta.com.br/metrics/surveys'
-      : 'http://localhost:8080/metrics/surveys';
+    const apiBaseUrl = `${API_BASE_URL}/metrics/surveys`;
     
     const apiToken = process.env.API_TOKEN;
     

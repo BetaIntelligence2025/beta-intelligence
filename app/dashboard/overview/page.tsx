@@ -362,6 +362,9 @@ export default function OverviewPage() {
                         <CardHeader className="relative flex flex-row items-center justify-between space-y-0 pb-2">
                           <CardTitle className="font-medium text-sm line-clamp-1">
                             {profession.profession_name}
+                            {profession.is_active === false && (
+                              <span className="ml-1 text-xs text-gray-500">(Desativada)</span>
+                            )}
                           </CardTitle>
                           {profession.active_funnels && profession.active_funnels.length > 0 && (
                             <Tooltip>
@@ -390,10 +393,8 @@ export default function OverviewPage() {
                           <div className="text-3xl font-bold text-black">
                             {profession.conversion_rate.toFixed(0)}%
                           </div>
-                          <div className="text-xs text-muted-foreground flex items-center gap-1">
-                            {profession.is_active === false ? (
-                              <span className="text-gray-500">Profissão desativada</span>
-                            ) : profession.growth === 0 ? (
+                          <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+                            {profession.growth === 0 ? (
                               <span>Sem alteração</span>
                             ) : (
                               <span className={profession.is_increasing ? "text-green-600" : "text-red-600"}>
@@ -406,8 +407,45 @@ export default function OverviewPage() {
                               </span>
                             )}
                           </div>
+
+                          {profession.is_active === false && (
+                            <div className="mt-3 text-xs flex items-center text-gray-500">
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="flex items-center cursor-help">
+                                      <Ban className="h-3 w-3 mr-1 inline" />
+                                      Profissão desativada
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent className="bg-gray-100 border-gray-200 text-gray-800 max-w-xs p-2">
+                                    <div className="text-xs">
+                                      <p className="font-semibold mb-1">Profissão Desativada</p>
+                                      <p className="mb-1">Esta profissão não está disponível para captação no momento.</p>
+                                      {profession.previous_rate !== undefined && profession.previous_rate > 0 && (
+                                        <div className="mt-2 pt-2 border-t border-gray-200">
+                                          <p className="font-medium">Últimos dados disponíveis:</p>
+                                          <div className="flex justify-between mt-1">
+                                            <span>Taxa anterior:</span>
+                                            <span className="font-medium">{profession.previous_rate.toFixed(1).replace('.', ',')}%</span>
+                                          </div>
+                                          <div className="flex justify-between">
+                                            <span>Variação:</span>
+                                            <span className={profession.is_increasing ? "text-green-600" : "text-red-600"}>
+                                              {profession.is_increasing ? "+" : ""}{profession.growth.toFixed(2).replace('.', ',')}%
+                                            </span>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            </div>
+                          )}
+                          
                           {profession.active_funnels && profession.active_funnels.length > 0 && (
-                            <div className="mt-2 rounded bg-gray-50 px-2 py-1">
+                            <div className="mt-3 rounded bg-gray-50 px-2 py-1">
                               <div className="text-xs text-gray-600 font-medium flex items-center">
                                 <span className="mr-1 inline-block h-2 w-2 rounded-full bg-gray-500"></span>
                                 <Tooltip>

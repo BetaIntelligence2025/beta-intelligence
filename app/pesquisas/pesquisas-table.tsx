@@ -275,6 +275,22 @@ export function PesquisasTable({
       return; // Não processar filtros padrão se o ciclo de webinar estiver ativo
     }
     
+    // Verificar se há apenas o parâmetro venda_inicio (filtro simplificado)
+    const vendaInicio = searchParamsObj.get('venda_inicio');
+    if (vendaInicio && !hasWebinarCycle) {
+      try {
+        // Configurar ciclo de webinar a partir de venda_inicio
+        const vendaInicioDate = new Date(vendaInicio);
+        setWebinarCycleActive(true);
+        setWebinarCycleDate(vendaInicioDate);
+        setWebinarCycleType('vendas');
+        console.log(`Filtro simplificado de venda_inicio detectado: ${vendaInicio}`);
+        return; // Não processar filtros padrão
+      } catch (error) {
+        console.error('Erro ao processar venda_inicio como filtro simplificado:', error);
+      }
+    }
+    
     // Buscar parâmetros para cada tipo de filtro (código original)
     ['captacao', 'pesquisa', 'vendas'].forEach((filterType) => {
       const fromKey = `${filterType}_from`;
@@ -298,6 +314,7 @@ export function PesquisasTable({
     });
     
     setActiveFilters(newActiveFilters);
+    console.log('Filtros ativos atualizados a partir da URL:', Object.keys(newActiveFilters).length > 0 ? newActiveFilters : 'nenhum');
   }, [searchParamsObj, isUpdatingDirectly]);
   
   // Sensores para o DnD
@@ -508,16 +525,44 @@ export function PesquisasTable({
       newParams.delete(`${type}_time_to`);
     });
     
-    // Adicionar parâmetros do ciclo
-    newParams.set('pesquisa_inicio', cycleData.pesquisa_inicio);
-    newParams.set('pesquisa_fim', cycleData.pesquisa_fim);
-    newParams.set('venda_inicio', cycleData.venda_inicio);
-    newParams.set('venda_fim', cycleData.venda_fim);
+    // Determinar se devemos usar o formato simplificado (apenas venda_inicio)
+    // que é compatível com a página de detalhes
+    const useSimplifiedFormat = true; // Sempre usar formato simplificado para compatibilidade
     
-    // Add filter type indicator
-    newParams.delete('captacao_mode');
-    newParams.delete('vendas_mode');
-    newParams.set(`${cycleData.type}_mode`, 'true');
+    if (useSimplifiedFormat) {
+      // Limpar qualquer outro parâmetro de ciclo
+      newParams.delete('pesquisa_inicio');
+      newParams.delete('pesquisa_fim');
+      newParams.delete('venda_inicio');
+      newParams.delete('venda_fim');
+      newParams.delete('captacao_mode');
+      newParams.delete('vendas_mode');
+      
+      // Adicionar apenas venda_inicio para compatibilidade com a página de detalhes
+      if (cycleData.venda_inicio) {
+        // Garantir que o formato está correto (20:30)
+        try {
+          const vendaInicioDate = new Date(cycleData.venda_inicio);
+          const formattedVendaInicio = formatISOWithBrazilTimezoneAndCorrectTime(vendaInicioDate, 'venda_inicio');
+          newParams.set('venda_inicio', formattedVendaInicio);
+          console.log(`Usando formato simplificado com venda_inicio: ${formattedVendaInicio}`);
+        } catch (error) {
+          console.error('Erro ao formatar venda_inicio:', error);
+          newParams.set('venda_inicio', cycleData.venda_inicio);
+        }
+      }
+    } else {
+      // Formato original com todos os parâmetros do ciclo
+      newParams.set('pesquisa_inicio', cycleData.pesquisa_inicio);
+      newParams.set('pesquisa_fim', cycleData.pesquisa_fim);
+      newParams.set('venda_inicio', cycleData.venda_inicio);
+      newParams.set('venda_fim', cycleData.venda_fim);
+      
+      // Add filter type indicator
+      newParams.delete('captacao_mode');
+      newParams.delete('vendas_mode');
+      newParams.set(`${cycleData.type}_mode`, 'true');
+    }
     
     // Resetar para página 1
     newParams.set('page', '1');
@@ -539,7 +584,7 @@ export function PesquisasTable({
     // Remove cycle parameters
     newParams.delete('pesquisa_inicio');
     newParams.delete('pesquisa_fim');
-    newParams.delete('venda_inicio');
+    newParams.delete('venda_inicio'); // Make sure this is cleared for compatibility with details page
     newParams.delete('venda_fim');
     newParams.delete('captacao_mode');
     newParams.delete('vendas_mode');
@@ -547,9 +592,11 @@ export function PesquisasTable({
     // Reset page
     newParams.set('page', '1');
     
-    // Update URL
-    updateUrl(newParams);
-  }, [searchParamsObj, updateUrl]);
+    console.log('Clearing webinar cycle filter');
+    
+    // Update URL - use router.push to ensure a full navigation event
+    router.push(`${window.location.pathname}?${newParams.toString()}`, { scroll: false });
+  }, [searchParamsObj, router]);
   
   // Handler para limpar todos os filtros (atualizado para incluir ciclo de webinar)
   const handleClearFilters = useCallback(() => {
@@ -685,7 +732,7 @@ export function PesquisasTable({
       } catch (error) {
         console.error('Erro ao formatar data de venda_inicio:', error);
         // Fallback para o parâmetro original se houver erro
-        url += `?venda_inicio=${encodeURIComponent(vendaInicio)}`;
+      url += `?venda_inicio=${encodeURIComponent(vendaInicio)}`;
       }
     }
     
@@ -917,7 +964,7 @@ export function PesquisasTable({
                             console.log("Data selecionada não é terça-feira, ajustando para próxima terça");
                             // Find next Tuesday
                             while (targetDate.getDay() !== 2) {
-                              targetDate.setDate(targetDate.getDate() + 1);
+                            targetDate.setDate(targetDate.getDate() + 1);
                             }
                           }
                           
@@ -946,38 +993,17 @@ export function PesquisasTable({
                           setWebinarCycleDate(targetDate);
                           setWebinarCycleActive(true);
                           
-                          // Usar a nova função garantindo o horário correto
-                          const vendasInicioISO = formatISOWithBrazilTimezoneAndCorrectTime(vendasInicio, 'venda_inicio');
+                          // Gerar todas as datas do ciclo para o handleWebinarCycleChange
+                          const cycleDates = {
+                            type: 'vendas' as 'captacao' | 'vendas',
+                            pesquisa_inicio: pesquisaInicio.toISOString(),
+                            pesquisa_fim: pesquisaFim.toISOString(),
+                            venda_inicio: formatISOWithBrazilTimezoneAndCorrectTime(vendasInicio, 'venda_inicio'),
+                            venda_fim: vendasFim.toISOString()
+                          };
                           
-                          console.log("Valor de venda_inicio após formatação:", vendasInicioISO);
-                          
-                          // Atualizar URL com um único parâmetro
-                          const newParams = new URLSearchParams(searchParamsObj.toString());
-                          
-                          // Limpar TODOS os filtros anteriores
-                          ['captacao', 'pesquisa', 'vendas'].forEach(type => {
-                            newParams.delete(`${type}_from`);
-                            newParams.delete(`${type}_to`);
-                            newParams.delete(`${type}_time_from`);
-                            newParams.delete(`${type}_time_to`);
-                          });
-                          
-                          // Remover todos os parâmetros de ciclo
-                          newParams.delete('pesquisa_inicio');
-                          newParams.delete('pesquisa_fim');
-                          newParams.delete('venda_inicio');
-                          newParams.delete('venda_fim');
-                          newParams.delete('captacao_mode');
-                          newParams.delete('vendas_mode');
-                          
-                          // Adicionar APENAS venda_inicio - nada mais
-                          newParams.set('venda_inicio', vendasInicioISO);
-                          
-                          // Resetar para página 1
-                          newParams.set('page', '1');
-                          
-                          // Atualizar URL
-                          updateUrl(newParams);
+                          // Usar o handler centralizado para aplicar o filtro
+                          handleWebinarCycleChange(cycleDates);
                         }
                       }}
                       disabled={(date) => date.getDay() !== 2} // Permitir apenas terças-feiras

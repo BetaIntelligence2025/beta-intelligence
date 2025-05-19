@@ -353,20 +353,48 @@ export async function GET(
       const hasSalesData = apiData.some((question: any) => 
         question.vendas_count !== undefined || 
         question.conversion_rate !== undefined || 
-        question.vendas_percentage !== undefined
+        question.vendas_percentage !== undefined ||
+        question.num_vendas !== undefined ||
+        question.taxa_conversao_percentual !== undefined ||
+        question.percentual_vendas !== undefined
       );
       
       if (!hasSalesData) {
         console.log(`Aviso: Dados de vendas não encontrados na resposta para ID: ${apiSurveyId}`);
       }
       
-      // Garantir que todas as questões tenham valores padrão para dados de vendas
-      processedData = apiData.map((question: any) => ({
-        ...question,
-        vendas_count: question.vendas_count !== undefined ? question.vendas_count : 0,
-        conversion_rate: question.conversion_rate !== undefined ? question.conversion_rate : 0,
-        vendas_percentage: question.vendas_percentage !== undefined ? question.vendas_percentage : 0
-      }));
+      // Mapear os campos para os nomes esperados pelo frontend
+      // sem adicionar valores padrão
+      processedData = apiData.map((question: any) => {
+        // Para cada questão, verificar e mapear os campos
+        const mappedQuestion = {
+          ...question,
+          // Usar nomes de campos que a UI espera
+          pergunta_id: question.pergunta_id || question.question_id,
+          texto_pergunta: question.texto_pergunta || question.question_text,
+          respostas: Array.isArray(question.respostas) ? 
+            question.respostas.map((resposta: any) => ({
+              ...resposta,
+              // Mapear campos de resposta sem valores padrão
+              texto_opcao: resposta.texto_opcao || resposta.resposta,
+              num_vendas: resposta.num_vendas !== undefined ? resposta.num_vendas : 
+                (resposta.vendas_count !== undefined ? resposta.vendas_count : undefined),
+              taxa_conversao_percentual: resposta.taxa_conversao_percentual !== undefined ? resposta.taxa_conversao_percentual : 
+                (resposta.conversion_rate !== undefined ? resposta.conversion_rate : undefined),
+              percentual_vendas: resposta.percentual_vendas !== undefined ? resposta.percentual_vendas : 
+                (resposta.vendas_percentage !== undefined ? resposta.vendas_percentage : 
+                 (resposta.percentual_do_total_vendas !== undefined ? resposta.percentual_do_total_vendas : undefined)),
+              percentual_participacao: resposta.percentual_participacao !== undefined ? resposta.percentual_participacao :
+                (resposta.participacao_percentual !== undefined ? resposta.participacao_percentual : undefined),
+              score_peso: resposta.score_peso !== undefined ? resposta.score_peso : 
+                (resposta.score !== undefined ? resposta.score : undefined)
+            })) : question.respostas
+        };
+        
+        return mappedQuestion;
+      });
+      
+      console.log(`Dados processados para exibição: ${processedData.length} questões com mapeamento de campos`);
     }
     
     return NextResponse.json(processedData);

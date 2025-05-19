@@ -5,7 +5,19 @@ import { ptBR } from 'date-fns/locale';
  * Validates if a date is a valid webinar cycle date (must be a Tuesday)
  */
 export function isValidWebinarDate(date: Date): boolean {
-  return isValid(date) && isTuesday(date);
+  if (!isValid(date)) {
+    console.error("Data inválida:", date);
+    return false;
+  }
+  
+  const dayOfWeek = date.getDay();
+  const isTuesday = dayOfWeek === 2;
+  
+  if (!isTuesday) {
+    console.error(`Data ${date.toISOString()} não é terça-feira (dia da semana: ${dayOfWeek})`);
+  }
+  
+  return isTuesday;
 }
 
 /**

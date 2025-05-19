@@ -888,9 +888,18 @@ export function PesquisasTable({
                         if (date) {
                           // Verificar se é terça-feira e ajustar se necessário
                           let targetDate = new Date(date);
-                          while (targetDate.getDay() !== 2) { // 2 = terça-feira
-                            targetDate.setDate(targetDate.getDate() + 1);
+                          
+                          // Check if it's a Tuesday (day 2)
+                          if (targetDate.getDay() !== 2) { 
+                            console.log("Data selecionada não é terça-feira, ajustando para próxima terça");
+                            // Find next Tuesday
+                            while (targetDate.getDay() !== 2) {
+                              targetDate.setDate(targetDate.getDate() + 1);
+                            }
                           }
+                          
+                          // Log para debug
+                          console.log(`Data selecionada (após ajuste): ${targetDate.toISOString()}, dia da semana: ${targetDate.getDay()}`);
                           
                           // Criar as datas conforme especificado
                           // pesquisa_inicio: 7 dias antes com horário 20:00

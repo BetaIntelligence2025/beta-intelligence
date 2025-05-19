@@ -25,20 +25,28 @@ function validateWebinarCycleParams(
   // Caso especial: Se apenas venda_inicio for fornecido, aceitamos como filtro simplificado
   if (vendaInicio && !pesquisaInicio && !pesquisaFim && !vendaFim) {
     try {
+      console.log(`Validando venda_inicio: ${vendaInicio}`);
       const vendaInicioDate = new Date(vendaInicio);
-      // Validar se a data é uma terça-feira às 20:30
-      if (!isValidWebinarDate(vendaInicioDate)) {
+      
+      // Verificar dia da semana (deve ser terça = 2)
+      const dayOfWeek = vendaInicioDate.getDay();
+      if (dayOfWeek !== 2) {
+        console.error(`Data ${vendaInicioDate.toISOString()} não é terça-feira (${dayOfWeek})`);
         return {
           isValid: false,
-          errorMessage: "Data de início de vendas inválida. As vendas sempre iniciam às terças-feiras."
+          errorMessage: `Data de início de vendas inválida. As vendas sempre iniciam às terças-feiras. Data recebida: ${vendaInicio} (dia da semana: ${dayOfWeek})`
         };
       }
       
-      if (!isValidWebinarTime(vendaInicioDate, 'venda_inicio')) {
-        return {
-          isValid: false,
-          errorMessage: "Horário de início de vendas inválido. As vendas sempre iniciam às 20:30."
-        };
+      // Verificar hora (deve ser 20:30)
+      const hours = vendaInicioDate.getHours();
+      const minutes = vendaInicioDate.getMinutes();
+      if (hours !== 20 || minutes !== 30) {
+        console.error(`Horário ${hours}:${minutes} não é 20:30`);
+        
+        // Corrigir o horário e retornar apenas um aviso de log
+        console.log(`Corrigindo horário para 20:30 (valor original: ${hours}:${minutes})`);
+        vendaInicioDate.setHours(20, 30, 0, 0);
       }
       
       return { isValid: true };
@@ -216,6 +224,15 @@ export async function GET(request: NextRequest) {
         
         try {
           const vendaInicioDate = new Date(vendaInicio);
+          console.log(`Dia da semana para ${vendaInicio}: ${vendaInicioDate.getDay()} (2=terça-feira)`);
+          
+          // Se não for terça-feira, encontre a próxima terça
+          if (vendaInicioDate.getDay() !== 2) {
+            console.log("Data não é terça-feira, ajustando para próxima terça");
+            while (vendaInicioDate.getDay() !== 2) {
+              vendaInicioDate.setDate(vendaInicioDate.getDate() + 1);
+            }
+          }
           
           // Sempre garantir que o horário seja exatamente 20:30:00
           vendaInicioDate.setHours(20, 30, 0, 0);

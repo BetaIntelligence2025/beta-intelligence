@@ -915,7 +915,9 @@ export function PesquisasTable({
                           setWebinarCycleActive(true);
                           
                           // Usar a nova função garantindo o horário correto
-                          const vendasInicioISO = formatISOWithBrazilTimezoneAndCorrectTime(targetDate, 'venda_inicio');
+                          const vendasInicioISO = formatISOWithBrazilTimezoneAndCorrectTime(vendasInicio, 'venda_inicio');
+                          
+                          console.log("Valor de venda_inicio após formatação:", vendasInicioISO);
                           
                           // Atualizar URL com um único parâmetro
                           const newParams = new URLSearchParams(searchParamsObj.toString());

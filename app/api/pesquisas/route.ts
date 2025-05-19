@@ -217,9 +217,13 @@ export async function GET(request: NextRequest) {
         try {
           const vendaInicioDate = new Date(vendaInicio);
           
-          // Sempre ajustar o horário para 20:30 conforme exigido pela API
+          // Sempre garantir que o horário seja exatamente 20:30:00
+          vendaInicioDate.setHours(20, 30, 0, 0);
+          
+          // Formatar com timezone do Brasil
           const formattedVendaInicio = formatISOWithBrazilTimezoneAndCorrectTime(vendaInicioDate, 'venda_inicio');
           
+          console.log('venda_inicio formatado para API:', formattedVendaInicio);
           apiParams.set('venda_inicio', formattedVendaInicio);
         } catch (error) {
           console.error('Erro ao processar venda_inicio:', error);

@@ -334,7 +334,35 @@ export default function SurveyDetailPage() {
         // Adicionar todos os parâmetros de busca da URL atual
         searchParams.forEach((value, key) => {
           if (value.trim() !== '') {
-            apiParams.append(key, value);
+            // Tratamento especial para venda_inicio
+            if (key === 'venda_inicio') {
+              try {
+                const vendaInicioDate = new Date(value);
+                
+                // Verificar se é terça-feira (dia 2)
+                if (vendaInicioDate.getDay() !== 2) {
+                  console.log(`Data de venda_inicio não é terça-feira (${vendaInicioDate.getDay()}), ajustando para próxima terça`);
+                  // Encontrar próxima terça
+                  while (vendaInicioDate.getDay() !== 2) {
+                    vendaInicioDate.setDate(vendaInicioDate.getDate() + 1);
+                  }
+                }
+                
+                // Forçar o horário para 20:30:00 exato
+                vendaInicioDate.setHours(20, 30, 0, 0);
+                
+                // Formatar em ISO com timezone Brasil
+                const formattedDate = formatDateWithBrasiliaTimezone(vendaInicioDate);
+                console.log(`Formatando venda_inicio para API: ${formattedDate} (original: ${value})`);
+                
+                apiParams.append(key, formattedDate);
+              } catch (error) {
+                console.error('Erro ao formatar venda_inicio:', error);
+                apiParams.append(key, value); // Fallback para valor original
+              }
+            } else {
+              apiParams.append(key, value);
+            }
           }
         });
         
@@ -407,8 +435,33 @@ export default function SurveyDetailPage() {
     const vendaInicio = searchParams.get('venda_inicio');
     
     if (vendaInicio) {
-      // Construir URL com filtro preservado
-      router.push(`/pesquisas?venda_inicio=${encodeURIComponent(vendaInicio)}`);
+      try {
+        // Garantir que o horário está correto (20:30:00)
+        const vendaInicioDate = new Date(vendaInicio);
+        
+        // Verificar se é terça-feira (dia 2)
+        if (vendaInicioDate.getDay() !== 2) {
+          console.log("Data de venda_inicio não é terça-feira, ajustando para próxima terça");
+          // Encontrar próxima terça
+          while (vendaInicioDate.getDay() !== 2) {
+            vendaInicioDate.setDate(vendaInicioDate.getDate() + 1);
+          }
+        }
+        
+        // Forçar o horário para 20:30:00 exatamente
+        vendaInicioDate.setHours(20, 30, 0, 0);
+        
+        // Formatar a data no formato ISO com timezone do Brasil
+        const formattedDate = formatDateWithBrasiliaTimezone(vendaInicioDate);
+        console.log(`Formatando venda_inicio para voltar: ${formattedDate} (original: ${vendaInicio})`);
+        
+        // Construir URL com filtro preservado e formatado corretamente
+        router.push(`/pesquisas?venda_inicio=${encodeURIComponent(formattedDate)}`);
+      } catch (error) {
+        console.error('Erro ao formatar venda_inicio:', error);
+        // Fallback para o valor original em caso de erro
+        router.push(`/pesquisas?venda_inicio=${encodeURIComponent(vendaInicio)}`);
+      }
     } else {
       router.back();
     }

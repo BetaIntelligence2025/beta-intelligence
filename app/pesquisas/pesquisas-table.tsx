@@ -663,7 +663,30 @@ export function PesquisasTable({
     // Preservar o parâmetro venda_inicio se estiver ativo
     const vendaInicio = searchParamsObj.get('venda_inicio');
     if (vendaInicio) {
-      url += `?venda_inicio=${encodeURIComponent(vendaInicio)}`;
+      try {
+        // Garantir que a hora esteja correta (20:30:00)
+        const vendaInicioDate = new Date(vendaInicio);
+        // Verificar se é terça-feira (dia 2)
+        if (vendaInicioDate.getDay() !== 2) {
+          console.log("Data de venda_inicio não é terça-feira, ajustando para próxima terça");
+          // Encontrar próxima terça
+          while (vendaInicioDate.getDay() !== 2) {
+            vendaInicioDate.setDate(vendaInicioDate.getDate() + 1);
+          }
+        }
+        
+        // Forçar o horário para 20:30:00 exatamente
+        vendaInicioDate.setHours(20, 30, 0, 0);
+        
+        // Formatar a data no formato ISO com timezone do Brasil
+        const formattedDate = formatISOWithBrazilTimezoneAndCorrectTime(vendaInicioDate, 'venda_inicio');
+        url += `?venda_inicio=${encodeURIComponent(formattedDate)}`;
+        console.log(`Data formatada para navegação: ${formattedDate}`);
+      } catch (error) {
+        console.error('Erro ao formatar data de venda_inicio:', error);
+        // Fallback para o parâmetro original se houver erro
+        url += `?venda_inicio=${encodeURIComponent(vendaInicio)}`;
+      }
     }
     
     console.log(`Navegando para pesquisa: ${url}`);

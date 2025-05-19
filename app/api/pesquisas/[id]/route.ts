@@ -8,27 +8,35 @@ function validateWebinarCycleParams(
   pesquisaFim?: string,
   vendaInicio?: string,
   vendaFim?: string
-): { isValid: boolean; errorMessage?: string } {
+): { isValid: boolean; errorMessage?: string; correctedVendaInicio?: string } {
   // Caso especial: Se apenas venda_inicio for fornecido, aceitamos como filtro simplificado
   if (vendaInicio && !pesquisaInicio && !pesquisaFim && !vendaFim) {
     try {
+      console.log(`Validando venda_inicio: ${vendaInicio}`);
       const vendaInicioDate = new Date(vendaInicio);
-      // Validar se a data é uma terça-feira às 20:30
-      if (!isValidWebinarDate(vendaInicioDate)) {
-        return {
-          isValid: false,
-          errorMessage: "Data de início de vendas inválida. As vendas sempre iniciam às terças-feiras."
-        };
+      
+      // Verificar dia da semana (deve ser terça = 2)
+      const dayOfWeek = vendaInicioDate.getDay();
+      if (dayOfWeek !== 2) {
+        console.error(`Data ${vendaInicioDate.toISOString()} não é terça-feira (${dayOfWeek})`);
+        // Em vez de retornar erro, vamos corrigir a data para a próxima terça
+        while (vendaInicioDate.getDay() !== 2) {
+          vendaInicioDate.setDate(vendaInicioDate.getDate() + 1);
+        }
+        console.log(`Corrigida para próxima terça-feira: ${vendaInicioDate.toISOString()}`);
       }
       
-      if (!isValidWebinarTime(vendaInicioDate, 'venda_inicio')) {
-        return {
-          isValid: false,
-          errorMessage: "Horário de início de vendas inválido. As vendas sempre iniciam às 20:30."
-        };
+      // Verificar hora (deve ser 20:30)
+      const hours = vendaInicioDate.getHours();
+      const minutes = vendaInicioDate.getMinutes();
+      if (hours !== 20 || minutes !== 30) {
+        console.error(`Horário ${hours}:${minutes} não é 20:30`);
+        // Corrigir o horário para 20:30 exatamente
+        vendaInicioDate.setHours(20, 30, 0, 0);
+        console.log(`Corrigido horário para 20:30:00 exatamente: ${vendaInicioDate.toISOString()}`);
       }
       
-      return { isValid: true };
+      return { isValid: true, correctedVendaInicio: formatISOWithBrazilTimezoneAndCorrectTime(vendaInicioDate, 'venda_inicio') };
     } catch (error) {
       console.error("Erro ao validar data de início de vendas:", error);
       return {
@@ -193,10 +201,16 @@ export async function GET(
         console.log('Filtro simplificado aplicado para detalhes da pesquisa: venda_inicio=', vendaInicio);
         
         try {
-          const vendaInicioDate = new Date(vendaInicio);
-          // Sempre ajustar o horário para 20:30 conforme exigido pela API
-          const formattedVendaInicio = formatISOWithBrazilTimezoneAndCorrectTime(vendaInicioDate, 'venda_inicio');
-          apiParams.set('venda_inicio', formattedVendaInicio);
+          // Usar o valor corrigido se disponível, caso contrário, formatar o original
+          if (webinarCycleValidation.correctedVendaInicio) {
+            console.log('Usando valor corrigido de venda_inicio:', webinarCycleValidation.correctedVendaInicio);
+            apiParams.set('venda_inicio', webinarCycleValidation.correctedVendaInicio);
+          } else {
+            const vendaInicioDate = new Date(vendaInicio);
+            // Sempre ajustar o horário para 20:30 conforme exigido pela API
+            const formattedVendaInicio = formatISOWithBrazilTimezoneAndCorrectTime(vendaInicioDate, 'venda_inicio');
+            apiParams.set('venda_inicio', formattedVendaInicio);
+          }
         } catch (error) {
           console.error('Erro ao processar venda_inicio:', error);
           return NextResponse.json({ error: 'Formato de data inválido para venda_inicio' }, { status: 400 });
@@ -208,9 +222,15 @@ export async function GET(
         // Garantir que venda_inicio tem o horário correto
         if (vendaInicio) {
           try {
-            const vendaInicioDate = new Date(vendaInicio);
-            const formattedVendaInicio = formatISOWithBrazilTimezoneAndCorrectTime(vendaInicioDate, 'venda_inicio');
-            apiParams.set('venda_inicio', formattedVendaInicio);
+            // Usar o valor corrigido se disponível
+            if (webinarCycleValidation.correctedVendaInicio) {
+              console.log('Usando valor corrigido de venda_inicio:', webinarCycleValidation.correctedVendaInicio);
+              apiParams.set('venda_inicio', webinarCycleValidation.correctedVendaInicio);
+            } else {
+              const vendaInicioDate = new Date(vendaInicio);
+              const formattedVendaInicio = formatISOWithBrazilTimezoneAndCorrectTime(vendaInicioDate, 'venda_inicio');
+              apiParams.set('venda_inicio', formattedVendaInicio);
+            }
           } catch (error) {
             console.error('Erro ao processar venda_inicio:', error);
             apiParams.set('venda_inicio', vendaInicio); // Fallback para o valor original se houver erro

@@ -13,18 +13,18 @@ import { ptBR } from "date-fns/locale"
 
 // Definir os tipos de dados para questões e respostas conforme documentação da API
 interface SurveyResponse {
-  resposta: string
+  texto_opcao: string
   score_peso: number
   num_respostas: number
-  participacao_percentual: number
+  percentual_participacao: number
   num_vendas: number
   taxa_conversao_percentual: number
-  percentual_do_total_vendas: number
+  percentual_vendas: number
 }
 
 interface SurveyQuestion {
-  question_id: string
-  question_text: string
+  pergunta_id: string
+  texto_pergunta: string
   respostas: SurveyResponse[]
 }
 
@@ -371,7 +371,7 @@ export default function SurveyDetailPage() {
           // Extrair as questões da pesquisa
           if (Array.isArray(survey.questoes) && survey.questoes.length > 0) {
             setQuestions(survey.questoes);
-            setSelectedQuestionId(survey.questoes[0].question_id);
+            setSelectedQuestionId(survey.questoes[0].pergunta_id);
             
             // Atualizar informações da pesquisa a partir do objeto recebido
             setSurveyInfo({
@@ -415,7 +415,7 @@ export default function SurveyDetailPage() {
   }
 
   // Encontrar a questão selecionada
-  const selectedQuestion = questions.find(q => q.question_id === selectedQuestionId)
+  const selectedQuestion = questions.find(q => q.pergunta_id === selectedQuestionId)
 
   return (
     <div className="container py-6 space-y-6">
@@ -648,30 +648,30 @@ export default function SurveyDetailPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-6">
               <div className="bg-white shadow-sm rounded-lg border p-4">
                 <div className="text-sm text-gray-500 mb-1">Total de Leads</div>
-                <div className="text-2xl font-bold">{surveyData.total_leads.toLocaleString()}</div>
+                <div className="text-2xl font-bold">{surveyData.total_leads?.toLocaleString() || 0}</div>
               </div>
               
               <div className="bg-white shadow-sm rounded-lg border p-4">
                 <div className="text-sm text-gray-500 mb-1">Total de Respostas</div>
-                <div className="text-2xl font-bold">{surveyData.total_respostas.toLocaleString()}</div>
+                <div className="text-2xl font-bold">{surveyData.total_respostas?.toLocaleString() || 0}</div>
                 <div className="text-sm text-blue-600 mt-1">
-                  Taxa: {surveyData.taxa_resposta_percentual.toFixed(2)}%
+                  Taxa: {(surveyData.taxa_resposta_percentual || 0).toFixed(2)}%
                 </div>
               </div>
               
               <div className="bg-white shadow-sm rounded-lg border p-4">
                 <div className="text-sm text-gray-500 mb-1">Total de Vendas</div>
-                <div className="text-2xl font-bold">{surveyData.total_vendas.toLocaleString()}</div>
+                <div className="text-2xl font-bold">{surveyData.total_vendas?.toLocaleString() || 0}</div>
                 <div className="text-sm text-green-600 mt-1">
-                  Taxa: {surveyData.taxa_conversao_percentual.toFixed(2)}%
+                  Taxa: {(surveyData.taxa_conversao_percentual || 0).toFixed(2)}%
                 </div>
               </div>
               
               <div className="bg-white shadow-sm rounded-lg border p-4">
                 <div className="text-sm text-gray-500 mb-1">Tempo Médio de Resposta</div>
-                <div className="text-2xl font-bold">{surveyData.tempo_medio_resposta.toFixed(1)} min</div>
+                <div className="text-2xl font-bold">{(surveyData.tempo_medio_resposta || 0).toFixed(1)} seg</div>
                 <div className="text-sm text-gray-500 mt-1">
-                  Por usuário: {surveyData.tempo_medio_resposta_por_usuario.toFixed(1)} min
+                  Por usuário: {(surveyData.tempo_medio_resposta_por_usuario || 0).toFixed(1)} seg
                 </div>
               </div>
             </div>
@@ -690,14 +690,14 @@ export default function SurveyDetailPage() {
               <div className="flex flex-wrap gap-2">
                 {questions.map((question) => (
                   <button
-                    key={question.question_id}
-                    onClick={() => setSelectedQuestionId(question.question_id)}
+                    key={question.pergunta_id}
+                    onClick={() => setSelectedQuestionId(question.pergunta_id)}
                     className={`px-3 py-1.5 text-sm rounded-md transition-all duration-200 
-                      ${selectedQuestionId === question.question_id 
+                      ${selectedQuestionId === question.pergunta_id 
                         ? 'bg-blue-500 text-white shadow-sm' 
                         : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-100'}`}
                   >
-                    {question.question_text}
+                    {question.texto_pergunta}
                   </button>
                 ))}
               </div>
@@ -705,55 +705,53 @@ export default function SurveyDetailPage() {
           </div>
 
           {/* Conteúdo da pergunta selecionada */}
-          {questions.map((question) => (
-            question.question_id === selectedQuestionId && (
-              <div key={question.question_id} className="bg-white rounded-lg border shadow-sm">
-                <div className="p-4 border-b bg-gray-50">
-                  <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-2">
-                    <h2 className="text-lg font-semibold text-gray-800">
-                      {question.question_text}
-                    </h2>
-                    {surveyData && (
-                      <div className="text-sm px-3 py-1 bg-blue-50 text-blue-700 rounded-full border border-blue-200 inline-flex items-center">
-                        <span className="font-medium mr-1">Profissão:</span> {surveyData.profissao}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div className="p-4 overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="bg-gray-50 text-gray-600">
-                      <tr>
-                        <th className="px-4 py-3 text-center font-semibold">Score</th>
-                        <th className="px-4 py-3 text-left font-semibold">Opção de Resposta</th>
-                        <th className="px-4 py-3 text-center font-semibold">Nº de Respostas</th>
-                        <th className="px-4 py-3 text-center font-semibold">Participação</th>
-                        <th className="px-4 py-3 text-center font-semibold">Nº de Vendas</th>
-                        <th className="px-4 py-3 text-center font-semibold">Conversão</th>
-                        <th className="px-4 py-3 text-center font-semibold">% das Vendas</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {question.respostas.map((resposta, index) => (
-                        <tr 
-                          key={resposta.resposta || index} 
-                          className={`hover:bg-gray-50 ${index === 0 ? 'bg-blue-50 hover:bg-blue-100' : ''}`}
-                        >
-                          <td className="px-4 py-3 text-center font-medium">{resposta.score_peso}</td>
-                          <td className="px-4 py-3">{resposta.resposta}</td>
-                          <td className="px-4 py-3 text-center">{resposta.num_respostas.toLocaleString()}</td>
-                          <td className="px-4 py-3 text-center">{resposta.participacao_percentual.toFixed(2)}%</td>
-                          <td className="px-4 py-3 text-center">{resposta.num_vendas.toLocaleString()}</td>
-                          <td className="px-4 py-3 text-center">{resposta.taxa_conversao_percentual.toFixed(2)}%</td>
-                          <td className="px-4 py-3 text-center">{resposta.percentual_do_total_vendas.toFixed(2)}%</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+          {selectedQuestion && (
+            <div className="bg-white rounded-lg border shadow-sm">
+              <div className="p-4 border-b bg-gray-50">
+                <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-2">
+                  <h2 className="text-lg font-semibold text-gray-800">
+                    {selectedQuestion.texto_pergunta}
+                  </h2>
+                  {surveyData && (
+                    <div className="text-sm px-3 py-1 bg-blue-50 text-blue-700 rounded-full border border-blue-200 inline-flex items-center">
+                      <span className="font-medium mr-1">Profissão:</span> {surveyData.profissao}
+                    </div>
+                  )}
                 </div>
               </div>
-            )
-          ))}
+              <div className="p-4 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 text-gray-600">
+                    <tr>
+                      <th className="px-4 py-3 text-center font-semibold">Score</th>
+                      <th className="px-4 py-3 text-left font-semibold">Opção de Resposta</th>
+                      <th className="px-4 py-3 text-center font-semibold">Nº de Respostas</th>
+                      <th className="px-4 py-3 text-center font-semibold">Participação</th>
+                      <th className="px-4 py-3 text-center font-semibold">Nº de Vendas</th>
+                      <th className="px-4 py-3 text-center font-semibold">Conversão</th>
+                      <th className="px-4 py-3 text-center font-semibold">% das Vendas</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {selectedQuestion.respostas.map((resposta, index) => (
+                      <tr 
+                        key={`${resposta.texto_opcao || ''}-${index}`}
+                        className={`hover:bg-gray-50 ${index === 0 ? 'bg-blue-50 hover:bg-blue-100' : ''}`}
+                      >
+                        <td className="px-4 py-3 text-center font-medium">{resposta.score_peso}</td>
+                        <td className="px-4 py-3">{resposta.texto_opcao}</td>
+                        <td className="px-4 py-3 text-center">{resposta.num_respostas?.toLocaleString() || 0}</td>
+                        <td className="px-4 py-3 text-center">{(resposta.percentual_participacao || 0).toFixed(2)}%</td>
+                        <td className="px-4 py-3 text-center">{resposta.num_vendas?.toLocaleString() || 0}</td>
+                        <td className="px-4 py-3 text-center">{(resposta.taxa_conversao_percentual || 0).toFixed(2)}%</td>
+                        <td className="px-4 py-3 text-center">{(resposta.percentual_vendas || 0).toFixed(2)}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>

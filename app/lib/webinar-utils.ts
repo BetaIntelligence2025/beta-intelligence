@@ -125,6 +125,43 @@ export function formatISOWithBrazilTimezone(date: Date): string {
 }
 
 /**
+ * Formats a date as ISO string with Brazil timezone (-03:00) ensuring correct time for webinar phases
+ * This is important because the backend requires specific times for each phase
+ */
+export function formatISOWithBrazilTimezoneAndCorrectTime(date: Date, phase: 'pesquisa_inicio' | 'pesquisa_fim' | 'venda_inicio' | 'venda_fim'): string {
+  // Garantir que estamos trabalhando com uma cópia da data
+  const d = new Date(date);
+  
+  // Ajustar o horário de acordo com a fase
+  switch(phase) {
+    case 'pesquisa_inicio':
+    case 'pesquisa_fim':
+      d.setHours(20, 0, 0, 0);
+      break;
+    case 'venda_inicio':
+      d.setHours(20, 30, 0, 0);
+      break;
+    case 'venda_fim':
+      d.setHours(23, 59, 59, 999);
+      break;
+  }
+  
+  // Extrair os componentes da data
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  
+  // Extrair os componentes de hora já ajustados
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  const seconds = String(d.getSeconds()).padStart(2, '0');
+  
+  // Montar a string ISO8601 com timezone fixo para Brasília (-03:00)
+  // Formato: YYYY-MM-DDThh:mm:ss-03:00
+  return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}-03:00`;
+}
+
+/**
  * Get next Tuesday from the given date
  */
 export function getNextTuesday(fromDate: Date = new Date()): Date {

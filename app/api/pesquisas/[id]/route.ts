@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isValidWebinarDate, isValidWebinarTime, validateWebinarCycleConsistency, validateVendasConsistency } from "@/app/lib/webinar-utils";
+import { isValidWebinarDate, isValidWebinarTime, validateWebinarCycleConsistency, validateVendasConsistency, formatISOWithBrazilTimezoneAndCorrectTime } from "@/app/lib/webinar-utils";
 import { API_BASE_URL } from '@/app/config/api';
 
 // Função para validar parâmetros do ciclo de webinar
@@ -190,21 +190,34 @@ export async function GET(
       
       // Caso especial: Se apenas venda_inicio for fornecido
       if (vendaInicio && !pesquisaInicio && !pesquisaFim && !vendaFim) {
-        apiParams.set('venda_inicio', vendaInicio);
         console.log('Filtro simplificado aplicado para detalhes da pesquisa: venda_inicio=', vendaInicio);
+        
+        try {
+          const vendaInicioDate = new Date(vendaInicio);
+          // Sempre ajustar o horário para 20:30 conforme exigido pela API
+          const formattedVendaInicio = formatISOWithBrazilTimezoneAndCorrectTime(vendaInicioDate, 'venda_inicio');
+          apiParams.set('venda_inicio', formattedVendaInicio);
+        } catch (error) {
+          console.error('Erro ao processar venda_inicio:', error);
+          return NextResponse.json({ error: 'Formato de data inválido para venda_inicio' }, { status: 400 });
+        }
       } else {
-        // Caso tradicional: todos os parâmetros são fornecidos
         if (pesquisaInicio) apiParams.set('pesquisa_inicio', pesquisaInicio);
         if (pesquisaFim) apiParams.set('pesquisa_fim', pesquisaFim);
-        if (vendaInicio) apiParams.set('venda_inicio', vendaInicio);
-        if (vendaFim) apiParams.set('venda_fim', vendaFim);
         
-        console.log('Parâmetros de ciclo de webinar aplicados para detalhes da pesquisa:', {
-          pesquisa_inicio: pesquisaInicio,
-          pesquisa_fim: pesquisaFim,
-          venda_inicio: vendaInicio,
-          venda_fim: vendaFim
-        });
+        // Garantir que venda_inicio tem o horário correto
+        if (vendaInicio) {
+          try {
+            const vendaInicioDate = new Date(vendaInicio);
+            const formattedVendaInicio = formatISOWithBrazilTimezoneAndCorrectTime(vendaInicioDate, 'venda_inicio');
+            apiParams.set('venda_inicio', formattedVendaInicio);
+          } catch (error) {
+            console.error('Erro ao processar venda_inicio:', error);
+            apiParams.set('venda_inicio', vendaInicio); // Fallback para o valor original se houver erro
+          }
+        }
+        
+        if (vendaFim) apiParams.set('venda_fim', vendaFim);
       }
     }
     
@@ -246,6 +259,19 @@ export async function GET(
     const endpointPath = `/metrics/surveys/${apiSurveyId}`;
     const fullApiUrl = `${apiBaseUrl}${endpointPath}`;
     const apiToken = process.env.API_TOKEN;
+    
+    // Adicionar parâmetro para incluir vendas explicitamente
+    apiParams.set('include_sales', 'true');
+    apiParams.set('include_conversions', 'true');
+    
+    // Garantir que venda_inicio esteja sempre presente com horário correto
+    if (!apiParams.has('venda_inicio') && !hasWebinarCycleParams) {
+      // Se não há nenhum filtro de data, usar a data atual formatada corretamente
+      const today = new Date();
+      const formattedVendaInicio = formatISOWithBrazilTimezoneAndCorrectTime(today, 'venda_inicio');
+      apiParams.set('venda_inicio', formattedVendaInicio);
+      console.log(`Adicionando venda_inicio padrão: ${formattedVendaInicio}`);
+    }
     
     // Log completo para depuração
     console.log(`Chamando API para detalhes da pesquisa: ${fullApiUrl}?${apiParams.toString()}`);
@@ -300,7 +326,30 @@ export async function GET(
       );
     }
     
-    return NextResponse.json(apiData);
+    // Processar e verificar se temos dados de vendas
+    let processedData = apiData;
+    if (Array.isArray(apiData)) {
+      // Verificar se alguma pergunta tem dados de vendas
+      const hasSalesData = apiData.some((question: any) => 
+        question.vendas_count !== undefined || 
+        question.conversion_rate !== undefined || 
+        question.vendas_percentage !== undefined
+      );
+      
+      if (!hasSalesData) {
+        console.log(`Aviso: Dados de vendas não encontrados na resposta para ID: ${apiSurveyId}`);
+      }
+      
+      // Garantir que todas as questões tenham valores padrão para dados de vendas
+      processedData = apiData.map((question: any) => ({
+        ...question,
+        vendas_count: question.vendas_count !== undefined ? question.vendas_count : 0,
+        conversion_rate: question.conversion_rate !== undefined ? question.conversion_rate : 0,
+        vendas_percentage: question.vendas_percentage !== undefined ? question.vendas_percentage : 0
+      }));
+    }
+    
+    return NextResponse.json(processedData);
   } catch (error: any) {
     console.error(`Erro ao buscar detalhes da pesquisa:`, error);
     return NextResponse.json(

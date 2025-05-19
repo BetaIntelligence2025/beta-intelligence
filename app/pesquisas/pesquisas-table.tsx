@@ -26,7 +26,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { DateFilter } from "../events/date-filter" 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { format } from "date-fns"
+import { format, isSameDay, addDays, startOfDay, addWeeks, subDays } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { cn } from "@/lib/utils"
 import {
@@ -36,6 +36,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion"
 import { Calendar } from "@/components/ui/calendar"
+import { generateWebinarCycleDates, formatISOWithBrazilTimezoneAndCorrectTime } from "@/app/lib/webinar-utils"
 
 /**
  * Interface para o tipo Pesquisa (survey)
@@ -913,8 +914,8 @@ export function PesquisasTable({
                           setWebinarCycleDate(targetDate);
                           setWebinarCycleActive(true);
                           
-                          // Apenas venda_inicio em formato ISO
-                          const vendasInicioISO = vendasInicio.toISOString();
+                          // Usar a nova função garantindo o horário correto
+                          const vendasInicioISO = formatISOWithBrazilTimezoneAndCorrectTime(targetDate, 'venda_inicio');
                           
                           // Atualizar URL com um único parâmetro
                           const newParams = new URLSearchParams(searchParamsObj.toString());

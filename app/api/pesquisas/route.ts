@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
-import { isValidWebinarDate, isValidWebinarTime, validateWebinarCycleConsistency, validateVendasConsistency } from "@/app/lib/webinar-utils";
+import { isValidWebinarDate, isValidWebinarTime, validateWebinarCycleConsistency, validateVendasConsistency, formatISOWithBrazilTimezoneAndCorrectTime } from "@/app/lib/webinar-utils";
 import { API_BASE_URL } from '@/app/config/api';
 
 // Modelo básico de pesquisa para o exemplo
@@ -212,13 +212,36 @@ export async function GET(request: NextRequest) {
       
       // Caso especial: Se apenas venda_inicio for fornecido
       if (vendaInicio && !pesquisaInicio && !pesquisaFim && !vendaFim) {
-        apiParams.set('venda_inicio', vendaInicio);
         console.log('Filtro simplificado aplicado: venda_inicio=', vendaInicio);
+        
+        try {
+          const vendaInicioDate = new Date(vendaInicio);
+          
+          // Sempre ajustar o horário para 20:30 conforme exigido pela API
+          const formattedVendaInicio = formatISOWithBrazilTimezoneAndCorrectTime(vendaInicioDate, 'venda_inicio');
+          
+          apiParams.set('venda_inicio', formattedVendaInicio);
+        } catch (error) {
+          console.error('Erro ao processar venda_inicio:', error);
+          return NextResponse.json({ error: 'Formato de data inválido para venda_inicio' }, { status: 400 });
+        }
       } else {
         // Caso tradicional: todos os parâmetros são fornecidos
         if (pesquisaInicio) apiParams.set('pesquisa_inicio', pesquisaInicio);
         if (pesquisaFim) apiParams.set('pesquisa_fim', pesquisaFim);
-        if (vendaInicio) apiParams.set('venda_inicio', vendaInicio);
+        
+        // Garantir que venda_inicio tem o horário correto
+        if (vendaInicio) {
+          try {
+            const vendaInicioDate = new Date(vendaInicio);
+            const formattedVendaInicio = formatISOWithBrazilTimezoneAndCorrectTime(vendaInicioDate, 'venda_inicio');
+            apiParams.set('venda_inicio', formattedVendaInicio);
+          } catch (error) {
+            console.error('Erro ao processar venda_inicio:', error);
+            apiParams.set('venda_inicio', vendaInicio); // Fallback para o valor original se houver erro
+          }
+        }
+        
         if (vendaFim) apiParams.set('venda_fim', vendaFim);
         
         console.log('Parâmetros de ciclo de webinar aplicados:', {

@@ -445,38 +445,42 @@ export default function OverviewPage() {
                           )}
                           
                           {profession.active_funnels && profession.active_funnels.length > 0 && (
-                            <div className="mt-3 rounded bg-gray-50 px-2 py-1">
-                              <div className="text-xs text-gray-600 font-medium flex items-center">
-                                <span className="mr-1 inline-block h-2 w-2 rounded-full bg-gray-500"></span>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <span className="cursor-help">
-                                      {profession.active_funnels.length} {profession.active_funnels.length === 1 ? 'funil ativo' : 'funis ativos'}
+                            <div className="mt-3 border-t border-gray-100 pt-2">
+                              <div className="flex items-center gap-1 mb-1.5">
+                                <div className={`h-2 w-2 rounded-full ${profession.is_increasing ? "bg-green-500" : "bg-red-500"}`}></div>
+                                <span className="text-xs font-medium text-gray-700">
+                                  {profession.active_funnels.length} {profession.active_funnels.length === 1 ? 'funil ativo' : 'funis ativos'}
+                                </span>
+                              </div>
+                              
+                              <div className="text-xs space-y-2">
+                                <div className="flex justify-between text-gray-800">
+                                  <span>Taxa atual:</span>
+                                  <span className={`font-medium ${profession.is_increasing ? "text-green-700" : "text-red-700"}`}>
+                                    {profession.conversion_rate.toFixed(1).replace('.', ',')}%
+                                  </span>
+                                </div>
+                                
+                                {profession.previous_rate !== undefined && profession.previous_rate > 0 && (
+                                  <div className="flex justify-between">
+                                    <span className="text-gray-600">Taxa anterior:</span>
+                                    <div>
+                                      <span className="text-gray-700">{profession.previous_rate.toFixed(1).replace('.', ',')}%</span>
+                                      <span className={`ml-1 ${profession.is_increasing ? "text-green-600" : "text-red-600"}`}>
+                                        ({profession.is_increasing ? "+" : ""}{profession.growth.toFixed(1).replace('.', ',')}%)
+                                      </span>
+                                    </div>
+                                  </div>
+                                )}
+                                
+                                {profession.active_funnels.map(funnel => (
+                                  <div key={funnel.funnel_id} className={`flex justify-between items-center py-1 px-2 rounded ${profession.is_increasing ? "bg-green-50" : "bg-red-50"}`}>
+                                    <span className="text-gray-700 font-medium truncate max-w-[70%]">{funnel.funnel_name}</span>
+                                    <span className={`px-1.5 py-0.5 rounded-full ${profession.is_increasing ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"} font-medium`}>
+                                      {funnel.conversion_rate.toFixed(1).replace('.', ',')}%
                                     </span>
-                                  </TooltipTrigger>
-                                  <TooltipContent className="bg-gray-100 border-gray-200 text-gray-800 max-w-xs p-2">
-                                    <div className="font-semibold mb-1">Funis ativos ({profession.active_funnels.length})</div>
-                                    <div className="text-xs mb-1 text-gray-700">Taxa de conversão atual: {profession.conversion_rate.toFixed(1).replace('.', ',')}%</div>
-                                    {profession.previous_rate !== undefined && profession.previous_rate > 0 && (
-                                      <div className="text-xs mb-2 text-gray-700">
-                                        Taxa anterior: {profession.previous_rate.toFixed(1).replace('.', ',')}%
-                                        <span className={`ml-1 ${profession.is_increasing ? "text-green-600" : "text-red-600"}`}>
-                                          ({profession.is_increasing ? "+" : ""}{profession.growth.toFixed(1).replace('.', ',')}%)
-                                        </span>
-                                      </div>
-                                    )}
-                                    <ul className="text-xs space-y-1">
-                                      {profession.active_funnels.map(funnel => (
-                                        <li key={funnel.funnel_id} className="flex justify-between border-t border-gray-300 pt-1">
-                                          <span>{funnel.funnel_name}</span>
-                                          <span className="font-medium">
-                                            {funnel.conversion_rate.toFixed(1).replace('.', ',')}%
-                                          </span>
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  </TooltipContent>
-                                </Tooltip>
+                                  </div>
+                                ))}
                               </div>
                             </div>
                           )}

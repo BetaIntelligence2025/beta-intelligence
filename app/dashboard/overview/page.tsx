@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { CalendarIcon, ArrowUpIcon, ArrowDownIcon, RefreshCw, TrendingUp, AlertCircle, Ban, GitBranch } from 'lucide-react'
+import { CalendarIcon, ArrowUpIcon, ArrowDownIcon, RefreshCw, TrendingUp, AlertCircle, Ban, GitBranch, Download, Camera } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { PageHeader } from '@/components/page-header'
@@ -12,6 +12,16 @@ import { API_BASE_URL } from '@/app/config/api'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { DateFilterButton, DateRange } from '@/app/dashboard/date-filter-button'
 import { useSearchParams, usePathname, useRouter } from 'next/navigation'
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
+import html2canvas from 'html2canvas'
+
+// Extend jsPDF type to include autoTable
+declare module 'jspdf' {
+  interface jsPDF {
+    autoTable: (options: any) => jsPDF;
+  }
+}
 
 interface ActiveFunnelDetails {
   funnel_id: number;
@@ -220,6 +230,50 @@ export default function OverviewPage() {
           >
             <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
           </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button 
+                  variant="outline" 
+                  size="icon" 
+                  className="h-10 w-10"
+                  onClick={async () => {
+                    try {
+                      // Capturar a área principal do dashboard
+                      const element = document.querySelector('.container') as HTMLElement;
+                      if (!element) return;
+                      
+                      const canvas = await html2canvas(element, {
+                        backgroundColor: '#ffffff',
+                        scale: 2, // Maior qualidade
+                        useCORS: true,
+                        allowTaint: true,
+                        height: element.scrollHeight,
+                        width: element.scrollWidth,
+                        scrollX: 0,
+                        scrollY: 0
+                      });
+                      
+                      // Criar link para download
+                      const link = document.createElement('a');
+                      link.download = `dashboard_conversao_${format(new Date(), 'yyyy-MM-dd_HH-mm')}.png`;
+                      link.href = canvas.toDataURL('image/png');
+                      link.click();
+                    } catch (error) {
+                      console.error('Erro ao capturar screenshot:', error);
+                    }
+                  }}
+                  disabled={isLoading || professions.length === 0}
+                  title="Capturar screenshot da tela"
+                >
+                  <Download className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent className="bg-gray-100 border-gray-200 text-gray-800">
+                <p>Capturar screenshot da tela</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
       </div>
       

@@ -164,13 +164,6 @@ export default function OverviewPage() {
       // Convertendo o objeto de profissões em um array
       if (data && data.data && data.data.professions) {
         const professionsArray = Object.values(data.data.professions)
-          // Ordenar por taxa de conversão (decrescente) e depois por nome (crescente)
-          .sort((a, b) => {
-            if (b.conversion_rate === a.conversion_rate) {
-              return a.profession_name.localeCompare(b.profession_name);
-            }
-            return b.conversion_rate - a.conversion_rate;
-          })
           // Remover a profissão "Unknown" e "Global" se não houver dados
           .filter(p => p.profession_name !== "Unknown" || p.conversion_rate > 0)
           // Garantir que a propriedade is_active esteja presente, defaultando para true se não definida
@@ -237,40 +230,219 @@ export default function OverviewPage() {
                   variant="outline" 
                   size="icon" 
                   className="h-10 w-10"
-                  onClick={async () => {
+                  onClick={async (e) => {
+                    const button = e.currentTarget;
+                    const originalText = button.title;
+                    
                     try {
-                      // Capturar a área principal do dashboard
-                      const element = document.querySelector('.container') as HTMLElement;
-                      if (!element) return;
+                      // Indicar que está processando
+                      button.style.opacity = '0.6';
+                      button.title = 'Capturando...';
                       
-                      const canvas = await html2canvas(element, {
-                        backgroundColor: '#ffffff',
-                        scale: 2, // Maior qualidade
-                        useCORS: true,
-                        allowTaint: true,
-                        height: element.scrollHeight,
-                        width: element.scrollWidth,
-                        scrollX: 0,
-                        scrollY: 0
+
+                      
+                      // Salvar estado original
+                      const originalScrollTop = window.pageYOffset;
+                      const originalScrollLeft = window.pageXOffset;
+                      
+                      // Ir para o topo
+                      window.scrollTo(0, 0);
+                      await new Promise(resolve => setTimeout(resolve, 300));
+                      
+                      // Encontrar o container do dashboard
+                      const dashboardContainer = document.querySelector('.container') as HTMLElement;
+                      if (!dashboardContainer) {
+                        alert('Container não encontrado!');
+                        return;
+                      }
+                      
+                      // Criar um wrapper temporário isolado
+                      const tempWrapper = document.createElement('div');
+                      tempWrapper.style.cssText = `
+                        position: absolute;
+                        top: 0;
+                        left: 0;
+                        width: 1400px;
+                        height: auto;
+                        min-height: auto;
+                        overflow: visible;
+                        z-index: 10000;
+                        background: white;
+                        padding: 40px;
+                        box-sizing: border-box;
+                        pointer-events: none;
+                      `;
+                      
+                      // Clonar o container para o wrapper
+                      const clonedContainer = dashboardContainer.cloneNode(true) as HTMLElement;
+                      clonedContainer.style.cssText = `
+                        width: 1320px;
+                        max-width: 1320px;
+                        height: auto !important;
+                        max-height: none !important;
+                        overflow: visible !important;
+                        position: static !important;
+                        transform: none !important;
+                        margin: 0 auto;
+                      `;
+                      
+                      // Forçar todos os elementos filhos a serem visíveis
+                      const allElements = clonedContainer.querySelectorAll('*');
+                      allElements.forEach(el => {
+                        const htmlEl = el as HTMLElement;
+                        if (htmlEl.style) {
+                          htmlEl.style.height = 'auto';
+                          htmlEl.style.maxHeight = 'none';
+                          htmlEl.style.overflow = 'visible';
+                          htmlEl.style.position = 'static';
+                          htmlEl.style.transform = 'none';
+                          htmlEl.style.clip = 'auto';
+                          htmlEl.style.clipPath = 'none';
+                        }
                       });
                       
-                      // Criar link para download
+                      // Adicionar o clone ao wrapper
+                      tempWrapper.appendChild(clonedContainer);
+                      
+                      // Adicionar wrapper ao body temporariamente
+                      document.body.appendChild(tempWrapper);
+                      
+                      // Aguardar renderização
+                      await new Promise(resolve => setTimeout(resolve, 1000));
+                      
+                      // Forçar múltiplos recálculos para garantir altura correta
+                      tempWrapper.offsetHeight;
+                      clonedContainer.offsetHeight;
+                      
+                      // Aguardar mais um pouco para estabilizar
+                      await new Promise(resolve => setTimeout(resolve, 500));
+                      
+                      // Calcular altura real considerando todo o conteúdo
+                      const fixedWidth = 1400;
+                      const contentHeight = clonedContainer.scrollHeight;
+                      const wrapperHeight = tempWrapper.scrollHeight;
+                      const totalHeight = Math.max(
+                        contentHeight + 80, // Altura do conteúdo + padding
+                        wrapperHeight,
+                        tempWrapper.offsetHeight
+                      );
+                      
+
+                      
+                      // Contar cards no clone
+                      const allCards = clonedContainer.querySelectorAll('[class*="Card"], .overflow-hidden');
+                      
+                      // Capturar o wrapper completo com dimensões fixas
+                      const canvas = await html2canvas(tempWrapper, {
+                        backgroundColor: '#ffffff',
+                        scale: 1.0, // Escala normal para melhor qualidade
+                        useCORS: true,
+                        allowTaint: true,
+                        logging: true,
+                        width: fixedWidth,
+                        height: totalHeight,
+                        windowWidth: fixedWidth,
+                        windowHeight: totalHeight,
+                        x: 0,
+                        y: 0,
+                        scrollX: 0,
+                        scrollY: 0,
+                        foreignObjectRendering: true,
+                        removeContainer: false,
+                        imageTimeout: 60000,
+                        ignoreElements: (element) => {
+                          const tagName = element.tagName?.toLowerCase();
+                          return tagName === 'script' || 
+                                 tagName === 'style' ||
+                                 tagName === 'noscript';
+                        },
+                        onclone: (clonedDoc) => {
+                          
+                          // Configurar documento clonado para altura máxima
+                          const clonedBody = clonedDoc.body;
+                          const clonedHtml = clonedDoc.documentElement;
+                          
+                          clonedBody.style.height = 'auto';
+                          clonedBody.style.maxHeight = 'none';
+                          clonedBody.style.overflow = 'visible';
+                          clonedHtml.style.height = 'auto';
+                          clonedHtml.style.maxHeight = 'none';
+                          clonedHtml.style.overflow = 'visible';
+                          
+                          // Encontrar wrapper clonado
+                          const clonedWrapper = clonedDoc.querySelector('div[style*="z-index: 10000"]') as HTMLElement;
+                          if (clonedWrapper) {
+                            clonedWrapper.style.width = fixedWidth + 'px';
+                            clonedWrapper.style.height = totalHeight + 'px';
+                            clonedWrapper.style.minHeight = totalHeight + 'px';
+                            clonedWrapper.style.maxHeight = 'none';
+                            clonedWrapper.style.overflow = 'visible';
+                            
+                            // Encontrar container clonado dentro do wrapper
+                            const clonedContainer = clonedWrapper.querySelector('.container') as HTMLElement;
+                            if (clonedContainer) {
+                              clonedContainer.style.height = 'auto';
+                              clonedContainer.style.minHeight = 'auto';
+                              clonedContainer.style.maxHeight = 'none';
+                            }
+                            
+                            // Garantir que todos os elementos sejam visíveis
+                            const allClonedElements = clonedWrapper.querySelectorAll('*');
+                            allClonedElements.forEach(element => {
+                              const htmlElement = element as HTMLElement;
+                              if (htmlElement.style) {
+                                htmlElement.style.maxHeight = 'none';
+                                htmlElement.style.height = 'auto';
+                                htmlElement.style.overflow = 'visible';
+                                htmlElement.style.position = 'static';
+                                htmlElement.style.transform = 'none';
+                                htmlElement.style.clip = 'auto';
+                                htmlElement.style.clipPath = 'none';
+                                htmlElement.style.visibility = 'visible';
+                                htmlElement.style.display = htmlElement.style.display === 'none' ? 'block' : htmlElement.style.display;
+                              }
+                            });
+                          }
+                          
+
+                        }
+                      });
+                      
+                      // Aguardar um momento antes de remover o wrapper
+                      await new Promise(resolve => setTimeout(resolve, 100));
+                      
+                      // Remover wrapper temporário
+                      document.body.removeChild(tempWrapper);
+                      
+                      // Restaurar scroll
+                      window.scrollTo(originalScrollLeft, originalScrollTop);
+                      
+
+                      
+                      // Download
                       const link = document.createElement('a');
-                      link.download = `dashboard_conversao_${format(new Date(), 'yyyy-MM-dd_HH-mm')}.png`;
-                      link.href = canvas.toDataURL('image/png');
+                      link.download = `dashboard_visualizacao_completa_${format(new Date(), 'yyyy-MM-dd_HH-mm')}.png`;
+                      link.href = canvas.toDataURL('image/png', 0.9);
                       link.click();
+                      
+
+                      
                     } catch (error) {
-                      console.error('Erro ao capturar screenshot:', error);
+                      // Silencioso - sem logs
+                    } finally {
+                      // Restaurar estado do botão
+                      button.style.opacity = '1';
+                      button.title = originalText;
                     }
                   }}
                   disabled={isLoading || professions.length === 0}
-                  title="Capturar screenshot da tela"
+                  title="Capturar visualização completa"
                 >
                   <Download className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent className="bg-gray-100 border-gray-200 text-gray-800">
-                <p>Capturar screenshot da tela</p>
+                <p>Capturar visualização completa - TODOS os dados sem cortes</p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>

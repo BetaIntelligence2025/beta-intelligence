@@ -136,7 +136,7 @@ export default function SurveyDetailPage() {
                 apiParams.append(key, value); // Fallback para valor original
               }
             } else {
-              apiParams.append(key, value);
+            apiParams.append(key, value);
             }
           }
         });
@@ -232,7 +232,7 @@ export default function SurveyDetailPage() {
       } catch (error) {
         console.error('Erro ao formatar venda_inicio:', error);
         // Fallback para o valor original em caso de erro
-        router.push(`/pesquisas?venda_inicio=${encodeURIComponent(vendaInicio)}`);
+      router.push(`/pesquisas?venda_inicio=${encodeURIComponent(vendaInicio)}`);
       }
     } else {
       router.back();
@@ -355,50 +355,50 @@ export default function SurveyDetailPage() {
           {/* Conteúdo da pergunta selecionada */}
           {selectedQuestion && (
             <div className="bg-white rounded-lg border shadow-sm">
-              <div className="p-4 border-b bg-gray-50">
-                <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-2">
-                  <h2 className="text-lg font-semibold text-gray-800">
+                <div className="p-4 border-b bg-gray-50">
+                  <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-2">
+                    <h2 className="text-lg font-semibold text-gray-800">
                     {selectedQuestion.texto_pergunta}
-                  </h2>
-                  {surveyData && (
-                    <div className="text-sm px-3 py-1 bg-blue-50 text-blue-700 rounded-full border border-blue-200 inline-flex items-center">
-                      <span className="font-medium mr-1">Profissão:</span> {surveyData.profissao}
-                    </div>
-                  )}
+                    </h2>
+                    {surveyData && (
+                      <div className="text-sm px-3 py-1 bg-blue-50 text-blue-700 rounded-full border border-blue-200 inline-flex items-center">
+                        <span className="font-medium mr-1">Profissão:</span> {surveyData.profissao}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-              <div className="p-4 overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 text-gray-600">
-                    <tr>
-                      <th className="px-4 py-3 text-center font-semibold">Score</th>
-                      <th className="px-4 py-3 text-left font-semibold">Opção de Resposta</th>
-                      <th className="px-4 py-3 text-center font-semibold">Nº de Respostas</th>
-                      <th className="px-4 py-3 text-center font-semibold">Participação</th>
-                      <th className="px-4 py-3 text-center font-semibold">Nº de Vendas</th>
-                      <th className="px-4 py-3 text-center font-semibold">Conversão</th>
-                      <th className="px-4 py-3 text-center font-semibold">% das Vendas</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
+                <div className="p-4 overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 text-gray-600">
+                      <tr>
+                        <th className="px-4 py-3 text-center font-semibold">Score</th>
+                        <th className="px-4 py-3 text-left font-semibold">Opção de Resposta</th>
+                        <th className="px-4 py-3 text-center font-semibold">Nº de Respostas</th>
+                        <th className="px-4 py-3 text-center font-semibold">Participação</th>
+                        <th className="px-4 py-3 text-center font-semibold">Nº de Vendas</th>
+                        <th className="px-4 py-3 text-center font-semibold">Conversão</th>
+                        <th className="px-4 py-3 text-center font-semibold">% das Vendas</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
                     {selectedQuestion.respostas && selectedQuestion.respostas.map((resposta, index) => (
-                      <tr 
+                        <tr 
                         key={`${resposta.texto_opcao || ''}-${index}`}
-                        className={`hover:bg-gray-50 ${index === 0 ? 'bg-blue-50 hover:bg-blue-100' : ''}`}
-                      >
-                        <td className="px-4 py-3 text-center font-medium">{resposta.score_peso}</td>
+                          className={`hover:bg-gray-50 ${index === 0 ? 'bg-blue-50 hover:bg-blue-100' : ''}`}
+                        >
+                          <td className="px-4 py-3 text-center font-medium">{resposta.score_peso}</td>
                         <td className="px-4 py-3">{resposta.texto_opcao}</td>
                         <td className="px-4 py-3 text-center">{resposta.num_respostas?.toLocaleString()}</td>
                         <td className="px-4 py-3 text-center">{resposta.percentual_participacao?.toFixed(2)}%</td>
                         <td className="px-4 py-3 text-center">{resposta.num_vendas?.toLocaleString()}</td>
                         <td className="px-4 py-3 text-center">{resposta.taxa_conversao_percentual?.toFixed(2)}%</td>
                         <td className="px-4 py-3 text-center">{resposta.percentual_vendas?.toFixed(2)}%</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
           )}
         </>
       )}

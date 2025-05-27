@@ -553,15 +553,15 @@ export function PesquisasTable({
       }
     } else {
       // Formato original com todos os parâmetros do ciclo
-      newParams.set('pesquisa_inicio', cycleData.pesquisa_inicio);
-      newParams.set('pesquisa_fim', cycleData.pesquisa_fim);
-      newParams.set('venda_inicio', cycleData.venda_inicio);
-      newParams.set('venda_fim', cycleData.venda_fim);
-      
-      // Add filter type indicator
-      newParams.delete('captacao_mode');
-      newParams.delete('vendas_mode');
-      newParams.set(`${cycleData.type}_mode`, 'true');
+    newParams.set('pesquisa_inicio', cycleData.pesquisa_inicio);
+    newParams.set('pesquisa_fim', cycleData.pesquisa_fim);
+    newParams.set('venda_inicio', cycleData.venda_inicio);
+    newParams.set('venda_fim', cycleData.venda_fim);
+    
+    // Add filter type indicator
+    newParams.delete('captacao_mode');
+    newParams.delete('vendas_mode');
+    newParams.set(`${cycleData.type}_mode`, 'true');
     }
     
     // Resetar para página 1

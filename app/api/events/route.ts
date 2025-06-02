@@ -30,7 +30,7 @@ function deduplicateEvents(events: any[]) {
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    
+    console.log(`searchParams: ${searchParams}`);
     // Verificar se essa é uma requisição sem filtros (após limpeza)
     // Contamos apenas os parâmetros básicos: page, sortBy, sortDirection
     const params = new URLSearchParams()

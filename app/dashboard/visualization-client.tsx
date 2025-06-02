@@ -34,6 +34,19 @@ const chartConfig = {
   conversions: {
     label: "Conversão da Captação",
     color: "#9CA3AF"
+  },
+  // Cores para período anterior (mais claras)
+  previous_leads: {
+    label: "Leads (Período Anterior)",
+    color: "#6B7280"
+  },
+  previous_sessions: {
+    label: "Sessões (Período Anterior)", 
+    color: "#9CA3AF"
+  },
+  previous_conversions: {
+    label: "Conversão (Período Anterior)",
+    color: "#D1D5DB"
   }
 } satisfies ChartConfig;
 
@@ -138,6 +151,46 @@ const MemoizedChart = memo(function Chart({
                     type="monotone" 
                     stroke={chartConfig.conversions.color}
                     strokeWidth={2}
+                    connectNulls={true}
+                    dot={{ strokeWidth: 2, r: 2 }}
+                    activeDot={{ r: 4 }}
+                  />
+                )}
+
+                {/* Linhas do período anterior - só aparecem quando um card específico está selecionado */}
+                {visibleDataKeys.includes('sessions') && data.some((item: any) => item.previous_sessions !== undefined) && (
+                  <Line 
+                    dataKey="previous_sessions" 
+                    type="monotone" 
+                    stroke={chartConfig.previous_sessions.color}
+                    strokeWidth={2}
+                    strokeDasharray="5 5"
+                    connectNulls={true}
+                    dot={{ strokeWidth: 2, r: 2 }}
+                    activeDot={{ r: 4 }}
+                  />
+                )}
+                
+                {visibleDataKeys.includes('leads') && data.some((item: any) => item.previous_leads !== undefined) && (
+                  <Line 
+                    dataKey="previous_leads" 
+                    type="monotone" 
+                    stroke={chartConfig.previous_leads.color}
+                    strokeWidth={2}
+                    strokeDasharray="5 5"
+                    connectNulls={true}
+                    dot={{ strokeWidth: 2, r: 2 }}
+                    activeDot={{ r: 4 }}
+                  />
+                )}
+                
+                {visibleDataKeys.includes('conversions') && data.some((item: any) => item.previous_conversions !== undefined) && (
+                  <Line 
+                    dataKey="previous_conversions" 
+                    type="monotone" 
+                    stroke={chartConfig.previous_conversions.color}
+                    strokeWidth={2}
+                    strokeDasharray="5 5"
                     connectNulls={true}
                     dot={{ strokeWidth: 2, r: 2 }}
                     activeDot={{ r: 4 }}
@@ -254,14 +307,17 @@ export default function VisualizationByPeriod(props: VisualizationByPeriodProps)
   const processChartData = useCallback((data: any, currentTimeFrame: TimeFrame) => {
     if (!data) return [];
     
+    // Obter as datas do filtro aplicado para filtrar os dados adequadamente
+    const filterFromDate = data.filters?.from;
+    const filterToDate = data.filters?.to;
+    
     // Verificar se é um único dia com dados por hora disponíveis
     if (data.hourly_data && 
         data.hourly_data.sessions_by_hour && 
         Object.keys(data.hourly_data.sessions_by_hour).length > 0) {
       
-      
       // Converter dados por hora em formato para o gráfico
-      return Object.entries(data.hourly_data.sessions_by_hour)
+      const currentHourlyData = Object.entries(data.hourly_data.sessions_by_hour)
         .map(([hour, sessionsCount]) => {
           // Formatar hora para display (00 a 23)
           const hourDisplay = `${hour.padStart(2, '0')}h`;
@@ -270,70 +326,171 @@ export default function VisualizationByPeriod(props: VisualizationByPeriodProps)
           const leadsCount = Number(data.hourly_data?.leads_by_hour?.[hour]) || 0;
           const conversionRate = Number(data.hourly_data?.conversion_rate_by_hour?.[hour]) || 0;
           
-          console.log(`Hora ${hourDisplay}: Sessões=${sessionsCount}, Leads=${leadsCount}, Conversão=${conversionRate}%`);
-          
-          return {
+          const result: any = {
             period: hourDisplay,
             date: hour, // Guardar a hora original como referência
             sessions: Number(sessionsCount) || 0,
             leads: leadsCount,
             conversions: conversionRate
           };
+
+          // Adicionar dados do período anterior se disponível e um card específico estiver selecionado
+          if (data.previous_period_data?.hourly_data && selectedCard) {
+            result.previous_sessions = Number(data.previous_period_data.hourly_data.sessions_by_hour?.[hour]) || 0;
+            result.previous_leads = Number(data.previous_period_data.hourly_data.leads_by_hour?.[hour]) || 0;
+            result.previous_conversions = Number(data.previous_period_data.hourly_data.conversion_rate_by_hour?.[hour]) || 0;
+          }
+
+          return result;
         })
         .sort((a, b) => a.date.localeCompare(b.date)); // Ordenar por hora
+        
+      return currentHourlyData;
     }
     
     // Caso para múltiplos períodos (dias/semanas/meses)
     if (data.sessions_by_day && typeof data.sessions_by_day === 'object') {
-      return Object.entries(data.sessions_by_day)
-        .map(([date, sessionsCount]) => {
+      const entries = Object.entries(data.sessions_by_day);
+      
+      // Filtrar apenas as datas que estão dentro do range solicitado
+      const filteredEntries = entries.filter(([date]) => {
+        // Se não temos filtros da API, incluir todas as datas
+        if (!filterFromDate || !filterToDate) return true;
+        
+        // Verificar se a data está dentro do range
+        return date >= filterFromDate && date <= filterToDate;
+      });
+      
+      const processedData = filteredEntries.map(([date, sessionsCount]) => {
           const parts = date.split('-');
           const formattedPeriod = currentTimeFrame === 'Daily' ? 
             `${parts[2]}/${parts[1]}/${parts[0]}` : 
             (currentTimeFrame === 'Monthly' ? 
               `${parts[1]}/${parts[0]}` : date);
           
-          return {
+          const result: any = {
             period: formattedPeriod,
             date,
             sessions: Number(sessionsCount) || 0,
             leads: Number(data.leads_by_day?.[date]) || 0,
             conversions: Number(data.conversion_rate_by_day?.[date]) || 0
           };
+
+          // Adicionar dados do período anterior se disponível e um card específico estiver selecionado
+          if (data.previous_period_data && selectedCard) {
+            // Para dados diários, mapear as datas corretamente
+            if (filterFromDate && filterToDate) {
+              const fromDate = new Date(filterFromDate);
+              const toDate = new Date(filterToDate);
+              const currentDate = new Date(date);
+              
+              // Calcular o índice do dia atual no período (0-indexed)
+              const dayIndex = Math.floor((currentDate.getTime() - fromDate.getTime()) / (1000 * 60 * 60 * 24));
+              
+              // Obter as datas do período anterior ordenadas
+              const previousDates = Object.keys(data.previous_period_data.sessions_by_day).sort();
+              
+              // Mapear para o dia correspondente no período anterior
+              if (dayIndex >= 0 && dayIndex < previousDates.length) {
+                const correspondingPreviousDate = previousDates[dayIndex];
+                
+                console.log(`Mapeamento: ${date} (índice ${dayIndex}) -> ${correspondingPreviousDate}`);
+                
+                result.previous_sessions = Number(data.previous_period_data.sessions_by_day?.[correspondingPreviousDate]) || 0;
+                result.previous_leads = Number(data.previous_period_data.leads_by_day?.[correspondingPreviousDate]) || 0;
+                result.previous_conversions = Number(data.previous_period_data.conversion_rate_by_day?.[correspondingPreviousDate]) || 0;
+              }
+            }
+          }
+
+          return result;
         })
         .sort((a, b) => a.date.localeCompare(b.date));
+      
+      // Remover o último ponto de dados se ele for igual à data final do filtro E tiver todos os valores zerados
+      if (processedData.length > 0 && filterToDate) {
+        const lastPoint = processedData[processedData.length - 1];
+        if (lastPoint.date === filterToDate && 
+            lastPoint.sessions === 0 && 
+            lastPoint.leads === 0) {
+          processedData.pop();
+        }
+      }
+      
+      return processedData;
     }
     
     // Verificar se estamos usando o formato antigo com period_counts
     if (data.period_counts && typeof data.period_counts === 'object') {
-      return Object.entries(data.period_counts)
-        .map(([date, sessionsCount]) => {
+      const entries = Object.entries(data.period_counts);
+      
+      // Filtrar apenas as datas que estão dentro do range solicitado
+      const filteredEntries = entries.filter(([date]) => {
+        // Se não temos filtros da API, incluir todas as datas
+        if (!filterFromDate || !filterToDate) return true;
+        
+        // Verificar se a data está dentro do range
+        return date >= filterFromDate && date <= filterToDate;
+      });
+      
+      const processedData = filteredEntries.map(([date, sessionsCount]) => {
           const parts = date.split('-');
           const formattedPeriod = currentTimeFrame === 'Daily' ? 
             `${parts[2]}/${parts[1]}/${parts[0]}` : 
             (currentTimeFrame === 'Monthly' ? 
               `${parts[1]}/${parts[0]}` : date);
           
-          return {
+          const result: any = {
             period: formattedPeriod,
             date,
             sessions: Number(sessionsCount) || 0,
             leads: Number(data.leads_by_day?.[date]) || 0,
             conversions: Number(data.conversion_rate_by_day?.[date]) || 0
           };
+
+          // Adicionar dados do período anterior se disponível e um card específico estiver selecionado
+          if (data.previous_period_data && selectedCard) {
+            // Lógica similar para period_counts
+            if (filterFromDate && filterToDate) {
+              const fromDate = new Date(filterFromDate);
+              const toDate = new Date(filterToDate);
+              const currentDate = new Date(date);
+              
+              // Calcular o índice do dia atual no período (0-indexed)
+              const dayIndex = Math.floor((currentDate.getTime() - fromDate.getTime()) / (1000 * 60 * 60 * 24));
+              
+              // Obter as datas do período anterior ordenadas
+              const previousDates = Object.keys(data.previous_period_data.sessions_by_day).sort();
+              
+              // Mapear para o dia correspondente no período anterior
+              if (dayIndex >= 0 && dayIndex < previousDates.length) {
+                const correspondingPreviousDate = previousDates[dayIndex];
+                
+                console.log(`Mapeamento: ${date} (índice ${dayIndex}) -> ${correspondingPreviousDate}`);
+                
+                result.previous_sessions = Number(data.previous_period_data.sessions_by_day?.[correspondingPreviousDate]) || 0;
+                result.previous_leads = Number(data.previous_period_data.leads_by_day?.[correspondingPreviousDate]) || 0;
+                result.previous_conversions = Number(data.previous_period_data.conversion_rate_by_day?.[correspondingPreviousDate]) || 0;
+              }
+            }
+          }
+
+          return result;
         })
         .sort((a, b) => a.date.localeCompare(b.date));
+        
+      return processedData;
     }
     
     console.error('Formato de dados inválido para o gráfico:', data);
     return [];
-  }, []);
+  }, [selectedCard]);
   
   // Memorize chart data
   const chartData = useMemo(() => {
     if (!dashboardData?.raw) return [];
     return processChartData(dashboardData.raw, timeFrame);
-  }, [dashboardData?.raw, timeFrame, processChartData]);
+  }, [dashboardData?.raw, timeFrame, processChartData, selectedCard]);
   
   // Determinar se estamos visualizando dados de um único dia
   const isSingleDayView = useMemo(() => {

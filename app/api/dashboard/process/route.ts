@@ -112,10 +112,10 @@ function processOldFormat(data: any[], timeFrame: TimeFrame) {
 function processNewFormat(data: any, timeFrame: TimeFrame) {
   console.log('Processando dados no novo formato:', JSON.stringify(data, null, 2));
   
-  // Obter todas as datas únicas de todas as séries
+  // Obter todas as datas únicas APENAS das séries atuais (não incluir período anterior)
   const allDates = new Set<string>();
   
-  // Adicionar datas das séries atuais
+  // Adicionar datas das séries atuais APENAS
   if (data.sessions_series?.current) {
     data.sessions_series.current.forEach((item: {date: string}) => allDates.add(item.date));
   }
@@ -123,13 +123,8 @@ function processNewFormat(data: any, timeFrame: TimeFrame) {
     data.leads_series.current.forEach((item: {date: string}) => allDates.add(item.date));
   }
   
-  // Adicionar datas das séries anteriores para eventual comparação
-  if (data.sessions_series?.previous) {
-    data.sessions_series.previous.forEach((item: {date: string}) => allDates.add(item.date));
-  }
-  if (data.leads_series?.previous) {
-    data.leads_series.previous.forEach((item: {date: string}) => allDates.add(item.date));
-  }
+  // REMOVER: Não adicionar datas das séries anteriores no gráfico principal
+  // As séries anteriores são apenas para comparação nos cards, não para o gráfico
   
   // Converter para array ordenado
   const sortedDates = Array.from(allDates).sort();
@@ -137,16 +132,13 @@ function processNewFormat(data: any, timeFrame: TimeFrame) {
   
   // Criar objeto para cada data com os valores correspondentes
   const result = sortedDates.map(date => {
-    // Encontrar valores correspondentes em cada série
+    // Encontrar valores correspondentes APENAS nas séries atuais
     const sessionItem = data.sessions_series?.current?.find((item: {date: string}) => item.date === date);
     const leadItem = data.leads_series?.current?.find((item: {date: string}) => item.date === date);
     
-    // Buscar nos dados do período anterior se não encontrou nos atuais (pode ocorrer em comparações)
-    const sessionValue = sessionItem ? sessionItem.value : 
-                          (data.sessions_series?.previous?.find((item: {date: string}) => item.date === date)?.value || 0);
-    
-    const leadValue = leadItem ? leadItem.value : 
-                       (data.leads_series?.previous?.find((item: {date: string}) => item.date === date)?.value || 0);
+    // Usar valores apenas das séries atuais
+    const sessionValue = sessionItem ? sessionItem.value : 0;
+    const leadValue = leadItem ? leadItem.value : 0;
     
     // Calcular taxa de conversão para esta data
     let conversionValue = 0;
@@ -171,16 +163,16 @@ function processNewFormat(data: any, timeFrame: TimeFrame) {
   
   console.log(`Processados ${result.length} pontos de dados para o gráfico`);
   
-  // Remover datas sem valores significativos
-  const filteredResult = result.filter(item => item.sessions > 0 || item.leads > 0);
+  // Manter todos os resultados (incluindo zeros) para mostrar o período completo solicitado
+  // Não filtrar por valores > 0, pois isso pode remover dias legítimos sem atividade
   
   // Ordenar por data
-  filteredResult.sort((a, b) => a.date.localeCompare(b.date));
+  result.sort((a, b) => a.date.localeCompare(b.date));
   
-  console.log(`Retornando ${filteredResult.length} pontos após filtragem`);
+  console.log(`Retornando ${result.length} pontos de dados`);
   
   // Retornar resposta JSON
-  return NextResponse.json(filteredResult);
+  return NextResponse.json(result);
 }
 
 // Separate data processing logic for better organization

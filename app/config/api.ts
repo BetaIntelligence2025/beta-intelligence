@@ -18,6 +18,8 @@ export const API_ENDPOINTS = {
   CLIENT: `${API_BASE_URL}/client`,
   ANONYMOUS: `${API_BASE_URL}/anonymous`,
   SESSION: `${API_BASE_URL}/session`,
+  DASHBOARD_REVENUE: `${API_BASE_URL}/dashboard/revenue`,
+  DASHBOARD_REVENUE_BY_PROFESSION: `${API_BASE_URL}/dashboard/revenue-by-profession`,
 };
 
 /**

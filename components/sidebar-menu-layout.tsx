@@ -112,6 +112,15 @@ export function SidebarMenuLayout() {
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
+          
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild isActive={pathname === "/dashboard/analytics"}>
+              <Link href="/dashboard/analytics">
+                <BarChart className="mr-2 h-4 w-4" />
+                Analytics Avançado
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
         </SidebarMenu>
       </SidebarContent>
       <SidebarFooter className="px-3 py-4 border-t">

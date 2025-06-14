@@ -465,68 +465,68 @@ export default function OverviewPage() {
               <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
                 <div className="flex gap-4">
                   <Card className="flex-1 border-0 shadow-sm">
-                    <CardContent className="pt-6">
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <h3 className="text-sm font-medium text-gray-500">Profissões ativas</h3>
+                <CardContent className="pt-6">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h3 className="text-sm font-medium text-gray-500">Profissões ativas</h3>
                           <p className="text-2xl font-bold text-black">
-                            {professions.filter(p => p.is_active !== false).length}
-                          </p>
-                        </div>
+                        {professions.filter(p => p.is_active !== false).length}
+                      </p>
+                    </div>
                         <div className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center">
                           <TrendingUp className="h-4 w-4 text-gray-500" />
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                  
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              
                   <Card className="flex-1 border-0 shadow-sm">
-                    <CardContent className="pt-6">
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <h3 className="text-sm font-medium text-gray-500">Profissões inativas</h3>
+                <CardContent className="pt-6">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h3 className="text-sm font-medium text-gray-500">Profissões inativas</h3>
                           <p className="text-2xl font-bold text-black">
-                            {professions.filter(p => p.is_active === false).length}
-                          </p>
-                        </div>
+                        {professions.filter(p => p.is_active === false).length}
+                      </p>
+                    </div>
                         <div className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center">
                           <AlertCircle className="h-4 w-4 text-gray-500" />
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                  
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              
                   <Card className="flex-1 border-0 shadow-sm">
-                    <CardContent className="pt-6">
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <h3 className="text-sm font-medium text-gray-500">Funis ativos</h3>
+                <CardContent className="pt-6">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h3 className="text-sm font-medium text-gray-500">Funis ativos</h3>
                           <p className="text-2xl font-bold text-black">
-                            {funnelStats.total_active_funnels}
-                          </p>
-                        </div>
+                        {funnelStats.total_active_funnels}
+                      </p>
+                    </div>
                         <div className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center">
                           <GitBranch className="h-4 w-4 text-gray-500" />
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                  
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              
                   <Card className="flex-1 border-0 shadow-sm">
-                    <CardContent className="pt-6">
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <h3 className="text-sm font-medium text-gray-500">Total de profissões</h3>
+                <CardContent className="pt-6">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h3 className="text-sm font-medium text-gray-500">Total de profissões</h3>
                           <p className="text-2xl font-bold text-black">
-                            {professions.length}
-                          </p>
-                        </div>
+                        {professions.length}
+                      </p>
+                    </div>
                         <div className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center">
                           <span className="text-gray-500 font-bold">Σ</span>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
                 </div>
               </div>
             </div>
@@ -535,53 +535,53 @@ export default function OverviewPage() {
           <div>
             <h2 className="text-xl font-semibold mb-4">Profissões</h2>
           
-            {isLoading ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                {Array.from({ length: 8 }).map((_, i) => (
-                  <Card key={i} className="overflow-hidden">
-                    <CardContent className="p-0">
-                      <div className="flex flex-col animate-pulse">
-                        <div className="p-4 border-b">
-                          <div className="h-5 bg-gray-200 rounded mb-2 w-3/4"></div>
-                          <div className="h-3 bg-gray-200 rounded w-1/2"></div>
-                          <div className="mt-2 flex justify-end">
-                            <div className="h-8 w-16 bg-gray-200 rounded"></div>
-                          </div>
-                        </div>
-                        <div className="h-1 w-full bg-gray-100">
-                          <div className="h-full bg-gray-300 w-1/2"></div>
+          {isLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <Card key={i} className="overflow-hidden">
+                  <CardContent className="p-0">
+                    <div className="flex flex-col animate-pulse">
+                      <div className="p-4 border-b">
+                        <div className="h-5 bg-gray-200 rounded mb-2 w-3/4"></div>
+                        <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                        <div className="mt-2 flex justify-end">
+                          <div className="h-8 w-16 bg-gray-200 rounded"></div>
                         </div>
                       </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            ) : (
-              <TooltipProvider>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  {professions.length === 0 && !isLoading ? (
-                    <div className="col-span-full p-4 text-center text-gray-500 border rounded-md">
-                      Nenhum dado de conversão encontrado para o período selecionado
+                      <div className="h-1 w-full bg-gray-100">
+                        <div className="h-full bg-gray-300 w-1/2"></div>
+                      </div>
                     </div>
-                  ) : (
-                    professions.map((profession) => (
-                      <Card 
-                        key={profession.profession_id} 
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <TooltipProvider>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {professions.length === 0 && !isLoading ? (
+                  <div className="col-span-full p-4 text-center text-gray-500 border rounded-md">
+                    Nenhum dado de conversão encontrado para o período selecionado
+                  </div>
+                ) : (
+                  professions.map((profession) => (
+                    <Card 
+                      key={profession.profession_id} 
                         className={`overflow-hidden ${profession.is_active === false ? 'bg-gray-50' : 'hover:bg-muted'} cursor-pointer transition-all relative`}
-                      >
-                        {profession.is_active === false && (
+                    >
+                      {profession.is_active === false && (
                           <div className="absolute top-2 right-2">
                             <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
                                   <div className="flex items-center justify-center h-6 w-6 rounded-full bg-gray-200">
                                     <Ban className="h-4 w-4 text-gray-500" />
                                   </div>
-                                </TooltipTrigger>
-                                <TooltipContent className="bg-gray-100 border-gray-200 text-gray-800">
-                                  <p>Esta profissão está desativada no sistema</p>
-                                </TooltipContent>
-                              </Tooltip>
+                                      </TooltipTrigger>
+                                      <TooltipContent className="bg-gray-100 border-gray-200 text-gray-800">
+                                        <p>Esta profissão está desativada no sistema</p>
+                                      </TooltipContent>
+                                    </Tooltip>
                             </TooltipProvider>
                           </div>
                         )}
@@ -590,29 +590,29 @@ export default function OverviewPage() {
                             {profession.profession_name}
                             {profession.is_active === false && (
                               <span className="ml-1 text-xs text-gray-500">(Desativada)</span>
-                            )}
+                                  )}
                           </CardTitle>
-                          {profession.active_funnels && profession.active_funnels.length > 0 && (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
+                                  {profession.active_funnels && profession.active_funnels.length > 0 && (
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
                                 <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gray-100">
                                   <GitBranch className="h-4 w-4 text-gray-500" />
                                 </div>
-                              </TooltipTrigger>
+                                      </TooltipTrigger>
                               <TooltipContent className="bg-gray-100 border-gray-200 text-gray-800 max-w-xs p-2">
                                 <div className="font-semibold mb-1">Funis ativos ({profession.active_funnels.length})</div>
-                                <ul className="text-xs space-y-1">
-                                  {profession.active_funnels.map(funnel => (
-                                    <li key={funnel.funnel_id} className="flex justify-between">
-                                      <span>{funnel.funnel_name}</span>
+                                        <ul className="text-xs space-y-1">
+                                          {profession.active_funnels.map(funnel => (
+                                            <li key={funnel.funnel_id} className="flex justify-between">
+                                              <span>{funnel.funnel_name}</span>
                                       <span className="font-medium">
                                         {funnel.conversion_rate.toFixed(1).replace('.', ',')}%
                                       </span>
-                                    </li>
-                                  ))}
-                                </ul>
-                              </TooltipContent>
-                            </Tooltip>
+                                            </li>
+                                          ))}
+                                        </ul>
+                                      </TooltipContent>
+                                    </Tooltip>
                           )}
                         </CardHeader>
                         <CardContent className="space-y-1 pt-0">
@@ -631,8 +631,8 @@ export default function OverviewPage() {
                                 )}
                                 {Math.abs(profession.growth).toFixed(2).replace('.', ',')}% de {profession.is_increasing ? 'crescimento' : 'queda'} sobre os {profession.previous_rate?.toFixed(1).replace('.', ',') || '0,0'}% anteriores
                               </span>
-                            )}
-                          </div>
+                                  )}
+                                </div>
 
                           {profession.is_active === false && (
                             <div className="mt-3 text-xs flex items-center text-gray-500">
@@ -705,18 +705,18 @@ export default function OverviewPage() {
                                     <span className={`px-1.5 py-0.5 rounded-full ${profession.is_increasing ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"} font-medium`}>
                                       {funnel.conversion_rate.toFixed(1).replace('.', ',')}%
                                     </span>
-                                  </div>
+                              </div>
                                 ))}
                               </div>
                             </div>
                           )}
-                        </CardContent>
-                      </Card>
-                    ))
-                  )}
-                </div>
-              </TooltipProvider>
-            )}
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
+              </div>
+            </TooltipProvider>
+          )}
           </div>
         </div>
       </div>

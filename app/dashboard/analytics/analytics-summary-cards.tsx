@@ -1,12 +1,12 @@
 "use client";
 
-import { DollarSign, TrendingUp, Target, BarChart3, Users, ShoppingCart } from "lucide-react";
+import { DollarSign, TrendingUp, Target, BarChart3, Users, ShoppingCart, Eye, MousePointer } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import CountAnimation from "@/components/ui/count-animation";
 import { cn } from "@/lib/utils";
 import { CardType } from "@/components/dashboard/summary-cards";
 
-export type AnalyticsCardType = "leads" | "purchases" | "cpl" | "investment" | "revenue" | "roas" | null;
+export type AnalyticsCardType = "leads" | "purchases" | "cpl" | "investment" | "revenue" | "roas" | "roi" | "ctr" | "cpc" | "impressions" | "clicks" | null;
 
 interface AnalyticsData {
   overall_leads: {
@@ -45,6 +45,37 @@ interface AnalyticsData {
     percentage: number;
     is_increasing: boolean;
   };
+  overall_roi?: {
+    current: number;
+    previous: number;
+    percentage: number;
+    is_increasing: boolean;
+  };
+  overall_ctr?: {
+    current: number;
+    previous: number;
+    percentage: number;
+    is_increasing: boolean;
+  };
+  overall_cpc?: {
+    current: number;
+    previous: number;
+    percentage: number;
+    is_increasing: boolean;
+  };
+  overall_impressions?: {
+    current: number;
+    previous: number;
+    percentage: number;
+    is_increasing: boolean;
+  };
+  overall_clicks?: {
+    current: number;
+    previous: number;
+    percentage: number;
+    is_increasing: boolean;
+  };
+  meta_available?: boolean;
   profession_data?: Array<{
     profession_id: string;
     profession_name: string;
@@ -104,39 +135,50 @@ const formatNumber = (value: number): string => {
   return value.toFixed(0);
 };
 
-// Componente para mostrar variação percentual
-const PercentageVariation = ({ 
+// Componente para mostrar variação percentual detalhada
+const DetailedPercentageVariation = ({ 
   current, 
   previous, 
   percentage, 
   isIncreasing, 
-  label 
+  label,
+  showPreviousValue = true,
+  formatValue = (val: number) => val.toLocaleString('pt-BR')
 }: {
   current: number;
   previous: number;
   percentage: number;
   isIncreasing: boolean;
   label: string;
+  showPreviousValue?: boolean;
+  formatValue?: (value: number) => string;
 }) => {
-  if (previous === 0) {
+  if (previous === 0 && current === 0) {
     return (
-      <span className="text-gray-500 text-xs">
-        Não comparável
-      </span>
+      <div className="text-xs text-gray-500">
+        <div>Sem dados para comparação</div>
+      </div>
     );
   }
 
   const formatPercentage = (num: number): string => {
-    return num.toFixed(1).replace('.', ',');
+    return num.toFixed(2).replace('.', ',');
   };
 
+  const changeText = isIncreasing ? "de crescimento" : "de queda";
+  const arrowIcon = isIncreasing ? "↗" : "↘";
+  const textColor = isIncreasing ? "text-green-600" : "text-red-600";
+
   return (
-    <span className={cn(
-      "text-xs flex items-center gap-1",
-      isIncreasing ? "text-green-600" : "text-red-600"
-    )}>
-      {isIncreasing ? "↑" : "↓"} {formatPercentage(percentage)}% vs período anterior
-    </span>
+    <div className="space-y-1">
+      <div className={cn("text-xs flex items-center gap-1", textColor)}>
+        <span>{arrowIcon}</span>
+        <span>{isIncreasing ? "+" : "-"}{formatPercentage(percentage)}% {changeText}</span>
+      </div>
+      <div className="text-xs text-gray-500">
+        em relação aos {formatValue(previous)} anteriores
+      </div>
+    </div>
   );
 };
 
@@ -206,14 +248,14 @@ export default function AnalyticsSummaryCards({
                   {isLoading ? (
                     "Carregando..."
                   ) : (
-                    analyticsData?.overall_leads?.current?.toLocaleString() || "0"
+                    analyticsData?.overall_leads?.current?.toLocaleString('pt-BR') || "0"
                   )}
                 </div>
                 <div className="text-xs text-muted-foreground mt-1">
                   {isLoading ? (
                     "Calculando..."
                   ) : analyticsData?.overall_leads ? (
-                    <PercentageVariation 
+                    <DetailedPercentageVariation 
                       current={analyticsData.overall_leads.current}
                       previous={analyticsData.overall_leads.previous}
                       percentage={analyticsData.overall_leads.percentage}
@@ -246,14 +288,14 @@ export default function AnalyticsSummaryCards({
                   {isLoading ? (
                     "Carregando..."
                   ) : (
-                    analyticsData?.overall_purchases?.current?.toLocaleString() || "0"
+                    analyticsData?.overall_purchases?.current?.toLocaleString('pt-BR') || "0"
                   )}
                 </div>
                 <div className="text-xs text-muted-foreground mt-1">
                   {isLoading ? (
                     "Calculando..."
                   ) : analyticsData?.overall_purchases ? (
-                    <PercentageVariation 
+                    <DetailedPercentageVariation 
                       current={analyticsData.overall_purchases.current}
                       previous={analyticsData.overall_purchases.previous}
                       percentage={analyticsData.overall_purchases.percentage}
@@ -293,7 +335,7 @@ export default function AnalyticsSummaryCards({
                   {isLoading ? (
                     "Calculando..."
                   ) : analyticsData?.overall_cpl ? (
-                    <PercentageVariation 
+                    <DetailedPercentageVariation 
                       current={analyticsData.overall_cpl.current}
                       previous={analyticsData.overall_cpl.previous}
                       percentage={analyticsData.overall_cpl.percentage}
@@ -333,7 +375,7 @@ export default function AnalyticsSummaryCards({
                   {isLoading ? (
                     "Calculando..."
                   ) : analyticsData?.overall_investment ? (
-                    <PercentageVariation 
+                    <DetailedPercentageVariation 
                       current={analyticsData.overall_investment.current}
                       previous={analyticsData.overall_investment.previous}
                       percentage={analyticsData.overall_investment.percentage}
@@ -373,7 +415,7 @@ export default function AnalyticsSummaryCards({
                   {isLoading ? (
                     "Calculando..."
                   ) : analyticsData?.overall_revenue ? (
-                    <PercentageVariation 
+                    <DetailedPercentageVariation 
                       current={analyticsData.overall_revenue.current}
                       previous={analyticsData.overall_revenue.previous}
                       percentage={analyticsData.overall_revenue.percentage}
@@ -413,7 +455,7 @@ export default function AnalyticsSummaryCards({
                   {isLoading ? (
                     "Calculando..."
                   ) : analyticsData?.overall_roas ? (
-                    <PercentageVariation 
+                    <DetailedPercentageVariation 
                       current={analyticsData.overall_roas.current}
                       previous={analyticsData.overall_roas.previous}
                       percentage={analyticsData.overall_roas.percentage}
@@ -426,6 +468,211 @@ export default function AnalyticsSummaryCards({
                 </div>
               </CardContent>
             </Card>
+
+            {/* Mostrar métricas adicionais da Meta apenas se os dados estiverem disponíveis */}
+            {analyticsData?.meta_available && (
+              <>
+                {/* ROI Geral */}
+                <Card 
+                  className={cn(
+                    "cursor-pointer transition-all hover:shadow-md",
+                    selectedCard === "roi" ? "ring-2 ring-primary" : ""
+                  )}
+                  onClick={() => handleCardClick("roi")}
+                >
+                  <CardHeader className="relative flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium text-black">ROI Geral</CardTitle>
+                    <div className="absolute end-4 top-4 flex size-12 items-center justify-center rounded-full bg-gray-100 p-4">
+                      <TrendingUp className="size-5 text-gray-500" />
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-black">
+                      {isLoading ? (
+                        "Carregando..."
+                      ) : (
+                        `${(analyticsData?.overall_roi?.current || 0).toFixed(1)}%`
+                      )}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      {isLoading ? (
+                        "Calculando..."
+                      ) : analyticsData?.overall_roi ? (
+                        <DetailedPercentageVariation 
+                          current={analyticsData.overall_roi.current}
+                          previous={analyticsData.overall_roi.previous}
+                          percentage={analyticsData.overall_roi.percentage}
+                          isIncreasing={analyticsData.overall_roi.is_increasing}
+                          label="ROI"
+                        />
+                      ) : (
+                        "Sem dados"
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* CTR Geral */}
+                <Card 
+                  className={cn(
+                    "cursor-pointer transition-all hover:shadow-md",
+                    selectedCard === "ctr" ? "ring-2 ring-primary" : ""
+                  )}
+                  onClick={() => handleCardClick("ctr")}
+                >
+                  <CardHeader className="relative flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium text-black">CTR Geral</CardTitle>
+                    <div className="absolute end-4 top-4 flex size-12 items-center justify-center rounded-full bg-gray-100 p-4">
+                      <Target className="size-5 text-gray-500" />
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-black">
+                      {isLoading ? (
+                        "Carregando..."
+                      ) : (
+                        `${(analyticsData?.overall_ctr?.current || 0).toFixed(2)}%`
+                      )}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      {isLoading ? (
+                        "Calculando..."
+                      ) : analyticsData?.overall_ctr ? (
+                        <DetailedPercentageVariation 
+                          current={analyticsData.overall_ctr.current}
+                          previous={analyticsData.overall_ctr.previous}
+                          percentage={analyticsData.overall_ctr.percentage}
+                          isIncreasing={analyticsData.overall_ctr.is_increasing}
+                          label="CTR"
+                        />
+                      ) : (
+                        "Sem dados"
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* CPC Geral */}
+                <Card 
+                  className={cn(
+                    "cursor-pointer transition-all hover:shadow-md",
+                    selectedCard === "cpc" ? "ring-2 ring-primary" : ""
+                  )}
+                  onClick={() => handleCardClick("cpc")}
+                >
+                  <CardHeader className="relative flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium text-black">CPC Geral</CardTitle>
+                    <div className="absolute end-4 top-4 flex size-12 items-center justify-center rounded-full bg-gray-100 p-4">
+                      <DollarSign className="size-5 text-gray-500" />
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-black">
+                      {isLoading ? (
+                        "Carregando..."
+                      ) : (
+                        formatCurrency(analyticsData?.overall_cpc?.current || 0)
+                      )}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      {isLoading ? (
+                        "Calculando..."
+                      ) : analyticsData?.overall_cpc ? (
+                        <DetailedPercentageVariation 
+                          current={analyticsData.overall_cpc.current}
+                          previous={analyticsData.overall_cpc.previous}
+                          percentage={analyticsData.overall_cpc.percentage}
+                          isIncreasing={analyticsData.overall_cpc.is_increasing}
+                          label="CPC"
+                        />
+                      ) : (
+                        "Sem dados"
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Impressions */}
+                <Card 
+                  className={cn(
+                    "cursor-pointer transition-all hover:shadow-md",
+                    selectedCard === "impressions" ? "ring-2 ring-primary" : ""
+                  )}
+                  onClick={() => handleCardClick("impressions")}
+                >
+                  <CardHeader className="relative flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium text-black">Impressões</CardTitle>
+                    <div className="absolute end-4 top-4 flex size-12 items-center justify-center rounded-full bg-gray-100 p-4">
+                      <Eye className="size-5 text-gray-500" />
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-black">
+                      {isLoading ? (
+                        "Carregando..."
+                      ) : (
+                        formatNumber(analyticsData?.overall_impressions?.current || 0)
+                      )}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      {isLoading ? (
+                        "Calculando..."
+                      ) : analyticsData?.overall_impressions ? (
+                        <DetailedPercentageVariation 
+                          current={analyticsData.overall_impressions.current}
+                          previous={analyticsData.overall_impressions.previous}
+                          percentage={analyticsData.overall_impressions.percentage}
+                          isIncreasing={analyticsData.overall_impressions.is_increasing}
+                          label="Impressões"
+                        />
+                      ) : (
+                        "Sem dados"
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Clicks */}
+                <Card 
+                  className={cn(
+                    "cursor-pointer transition-all hover:shadow-md",
+                    selectedCard === "clicks" ? "ring-2 ring-primary" : ""
+                  )}
+                  onClick={() => handleCardClick("clicks")}
+                >
+                  <CardHeader className="relative flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium text-black">Cliques</CardTitle>
+                    <div className="absolute end-4 top-4 flex size-12 items-center justify-center rounded-full bg-gray-100 p-4">
+                      <MousePointer className="size-5 text-gray-500" />
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-black">
+                      {isLoading ? (
+                        "Carregando..."
+                      ) : (
+                        formatNumber(analyticsData?.overall_clicks?.current || 0)
+                      )}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      {isLoading ? (
+                        "Calculando..."
+                      ) : analyticsData?.overall_clicks ? (
+                        <DetailedPercentageVariation 
+                          current={analyticsData.overall_clicks.current}
+                          previous={analyticsData.overall_clicks.previous}
+                          percentage={analyticsData.overall_clicks.percentage}
+                          isIncreasing={analyticsData.overall_clicks.is_increasing}
+                          label="Cliques"
+                        />
+                      ) : (
+                        "Sem dados"
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -519,7 +766,7 @@ export default function AnalyticsSummaryCards({
                 {isLoading ? (
                   "Calculando..."
                 ) : professionData && professionData.previous_leads ? (
-                  <PercentageVariation 
+                  <DetailedPercentageVariation 
                     current={professionData.leads}
                     previous={professionData.previous_leads}
                     percentage={professionData.growth_leads || 0}
@@ -559,7 +806,7 @@ export default function AnalyticsSummaryCards({
                 {isLoading ? (
                   "Calculando..."
                 ) : professionData && professionData.previous_purchases ? (
-                  <PercentageVariation 
+                  <DetailedPercentageVariation 
                     current={professionData.purchases}
                     previous={professionData.previous_purchases}
                     percentage={professionData.growth_purchases || 0}
@@ -599,7 +846,7 @@ export default function AnalyticsSummaryCards({
                 {isLoading ? (
                   "Calculando..."
                 ) : professionData && professionData.previous_cpl ? (
-                  <PercentageVariation 
+                  <DetailedPercentageVariation 
                     current={professionData.cpl}
                     previous={professionData.previous_cpl}
                     percentage={professionData.growth_cpl || 0}
@@ -639,7 +886,7 @@ export default function AnalyticsSummaryCards({
                 {isLoading ? (
                   "Calculando..."
                 ) : professionData && professionData.previous_investment ? (
-                  <PercentageVariation 
+                  <DetailedPercentageVariation 
                     current={professionData.investment}
                     previous={professionData.previous_investment}
                     percentage={professionData.growth_investment || 0}
@@ -679,7 +926,7 @@ export default function AnalyticsSummaryCards({
                 {isLoading ? (
                   "Calculando..."
                 ) : professionData && professionData.previous_revenue ? (
-                  <PercentageVariation 
+                  <DetailedPercentageVariation 
                     current={professionData.revenue}
                     previous={professionData.previous_revenue}
                     percentage={professionData.growth_revenue || 0}
@@ -719,7 +966,7 @@ export default function AnalyticsSummaryCards({
                 {isLoading ? (
                   "Calculando..."
                 ) : professionData && professionData.previous_roas ? (
-                  <PercentageVariation 
+                  <DetailedPercentageVariation 
                     current={professionData.roas}
                     previous={professionData.previous_roas}
                     percentage={professionData.growth_roas || 0}

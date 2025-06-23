@@ -48,6 +48,26 @@ const chartConfig = {
     label: "ROAS",
     color: "#111827"
   },
+  roi: {
+    label: "ROI",
+    color: "#6B7280"
+  },
+  ctr: {
+    label: "CTR",
+    color: "#4B5563"
+  },
+  cpc: {
+    label: "CPC",
+    color: "#9CA3AF"
+  },
+  impressions: {
+    label: "Impressões",
+    color: "#6B7280"
+  },
+  clicks: {
+    label: "Cliques",
+    color: "#4B5563"
+  },
   // Cores mais claras para período anterior
   previous_leads: {
     label: "Leads (Período Anterior)",
@@ -76,6 +96,26 @@ const chartConfig = {
   previous_roas: {
     label: "ROAS (Período Anterior)",
     color: "#9CA3AF"
+  },
+  previous_roi: {
+    label: "ROI (Período Anterior)",
+    color: "#D1D5DB"
+  },
+  previous_ctr: {
+    label: "CTR (Período Anterior)",
+    color: "#E5E7EB"
+  },
+  previous_cpc: {
+    label: "CPC (Período Anterior)",
+    color: "#F3F4F6"
+  },
+  previous_impressions: {
+    label: "Impressões (Período Anterior)",
+    color: "#E5E7EB"
+  },
+  previous_clicks: {
+    label: "Cliques (Período Anterior)",
+    color: "#F3F4F6"
   }
 } satisfies ChartConfig;
 
@@ -137,7 +177,7 @@ const MemoizedAnalyticsChart = memo(function AnalyticsChart({
             }
             
             // Format numbers based on metric type
-            if (selectedMetric === 'cpl' || selectedMetric === 'investment') {
+            if (selectedMetric === 'cpl' || selectedMetric === 'investment' || selectedMetric === 'cpc') {
               if (numValue === 0) {
                 return 'R$ 0';
               }
@@ -151,6 +191,12 @@ const MemoizedAnalyticsChart = memo(function AnalyticsChart({
                 return '0x';
               }
               return `${numValue.toFixed(2)}x`;
+            }
+            if (selectedMetric === 'roi' || selectedMetric === 'ctr') {
+              return `${numValue.toFixed(1)}%`;
+            }
+            if (selectedMetric === 'impressions' || selectedMetric === 'clicks') {
+              return numValue.toLocaleString('pt-BR');
             }
             return numValue.toLocaleString('pt-BR');
           }}
@@ -174,8 +220,8 @@ const MemoizedAnalyticsChart = memo(function AnalyticsChart({
                 const baseMetric = metricName.startsWith('previous_') ? metricName.replace('previous_', '') : metricName;
                 
                 // Formatação específica por tipo de métrica
-                if (baseMetric === 'cpl' || baseMetric === 'investment') {
-                  // Para CPL e Investment zerados, mostrar "R$ 0"
+                if (baseMetric === 'cpl' || baseMetric === 'investment' || baseMetric === 'cpc') {
+                  // Para CPL, Investment e CPC zerados, mostrar "R$ 0"
                   if (numValue === 0) {
                     return 'R$ 0';
                   } else {
@@ -190,12 +236,19 @@ const MemoizedAnalyticsChart = memo(function AnalyticsChart({
                   } else {
                     return `${numValue.toFixed(2)}x`;
                   }
+                } else if (baseMetric === 'roi' || baseMetric === 'ctr') {
+                  // Para ROI e CTR, mostrar como porcentagem
+                  return `${numValue.toFixed(2)}%`;
                 } else if (baseMetric === 'sessions') {
                   return `${numValue.toLocaleString('pt-BR')} sessões`;
                 } else if (baseMetric === 'purchases') {
                   return `${numValue.toLocaleString('pt-BR')} compras`;
                 } else if (baseMetric === 'leads') {
                   return `${numValue.toLocaleString('pt-BR')} leads`;
+                } else if (baseMetric === 'impressions') {
+                  return `${numValue.toLocaleString('pt-BR')} impressões`;
+                } else if (baseMetric === 'clicks') {
+                  return `${numValue.toLocaleString('pt-BR')} cliques`;
                 } else {
                   return `${numValue.toLocaleString('pt-BR')}`;
                 }
@@ -208,17 +261,17 @@ const MemoizedAnalyticsChart = memo(function AnalyticsChart({
         {visibleDataKeys.map(metric => {
           const isPreviousPeriod = metric.startsWith('previous_');
           return (
-            <Line 
-              key={metric}
-              dataKey={metric} 
-              type="monotone" 
-              stroke={chartConfig[metric as keyof typeof chartConfig]?.color || "#1F2937"}
+          <Line 
+            key={metric}
+            dataKey={metric} 
+            type="monotone" 
+            stroke={chartConfig[metric as keyof typeof chartConfig]?.color || "#1F2937"}
               strokeWidth={isPreviousPeriod ? 1.5 : 2}
               strokeDasharray={isPreviousPeriod ? "5 5" : "0"}
-              connectNulls={true}
+            connectNulls={true}
               dot={{ strokeWidth: isPreviousPeriod ? 1.5 : 2, r: isPreviousPeriod ? 2 : 3 }}
               activeDot={{ r: isPreviousPeriod ? 4 : 5 }}
-            />
+          />
           );
         })}
       </LineChart>
@@ -290,7 +343,7 @@ export default function AnalyticsChart({
   // Fetch historical data when dependencies change
   useEffect(() => {
     if (dateRange) {
-      fetchHistoricalData();
+    fetchHistoricalData();
     }
   }, [dateRange, viewType, selectedProfession]);
 

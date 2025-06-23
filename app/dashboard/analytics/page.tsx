@@ -64,6 +64,25 @@ interface AnalyticsData {
     percentage: number;
     is_increasing: boolean;
   };
+  overall_roi?: {
+    current: number;
+    previous: number;
+    percentage: number;
+    is_increasing: boolean;
+  };
+  overall_ctr?: {
+    current: number;
+    previous: number;
+    percentage: number;
+    is_increasing: boolean;
+  };
+  overall_cpc?: {
+    current: number;
+    previous: number;
+    percentage: number;
+    is_increasing: boolean;
+  };
+  meta_available?: boolean;
   profession_data?: Array<{
     profession_id: string;
     profession_name: string;
@@ -209,7 +228,7 @@ export default function AnalyticsDashboard() {
       params.set('from', fromDate);
       params.set('to', toDate);
       
-      router.replace(`/dashboard/analytics?${params.toString()}`, { scroll: false });
+        router.replace(`/dashboard/analytics?${params.toString()}`, { scroll: false });
     }
   }, [searchParams, router]);
   
@@ -306,6 +325,8 @@ export default function AnalyticsDashboard() {
       setIsDownloading(false);
     }
   };
+
+  console.log(analyticsData);
   
   // Load initial data - executa quando necessário
   useEffect(() => {
@@ -313,7 +334,7 @@ export default function AnalyticsDashboard() {
       refreshData();
     }
   }, [dateRange, activeTab, selectedProfession, refreshData]);
-
+  
   return (
     <div id="analytics-dashboard-container" className="flex flex-col gap-4 p-4 md:p-8 bg-white">
       <div className="flex items-center justify-between mb-4">

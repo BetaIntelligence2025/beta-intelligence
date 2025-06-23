@@ -104,7 +104,6 @@ async function fetchRevenueWithMetaData(params: {
         cplPerLead,
         roas,
         
-        // Dados do período anterior (do previous_period e dados internos)
         previousLeads: basicPreviousLeads,
         previousRevenue: basicPreviousRevenue,
         previousPurchases: basicPreviousPurchases,
